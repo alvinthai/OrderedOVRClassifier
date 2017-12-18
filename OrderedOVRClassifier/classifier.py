@@ -210,7 +210,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         enc: LabelEncoder
             LabelEncoder object for transforming the y values.
         '''
-        if self._le is not None and not lgbm_grid:
+        if hasattr(self._le, 'classes_') and not lgbm_grid:
             enc = self._le
         else:
             enc = LabelEncoder().fit(y)
