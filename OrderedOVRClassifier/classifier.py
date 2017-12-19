@@ -128,6 +128,10 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         final outputted prediction. Pipeline can be appended with additional
         models using the attach_ovr_model and attach_final_model functions.
 
+    rest_precision: list of float
+        A list of precision scores for the rest class in OVR classification.
+        Used to guesstimate probabilities for predict_proba.
+
     thresholds: list of float
         A list of thresholds for positive classification for bianry OVR models
         in the OrderedOVRClassifier pipeline.
@@ -140,6 +144,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         self.input_cols = None
         self.mask = None
         self.pipeline = []
+        self.rest_precision = []
         self.thresholds = []
 
         self.target = target
@@ -424,15 +429,17 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             # Use best weighted f1 score as threshold and set mask for future
             # steps to remove true values for class from subsequent training.
             if eval_set is None:
-                best = plot_thresholds(clf, Xm, ym, '{} vs. Rest'
-                                       .format(str(ovr_val).title()))
+                best, scores = plot_thresholds(clf, Xm, ym, '{} vs. Rest'
+                                               .format(str(ovr_val).title()))
             else:
-                best = plot_thresholds(clf, eval_X, eval_y, '{} vs. Rest'
-                                       .format(str(ovr_val).title()))
+                best, scores = plot_thresholds(clf, eval_X, eval_y,
+                                               '{} vs. Rest'
+                                               .format(str(ovr_val).title()))
 
             if attach:  # add fitted model for ovr_val to the pipeline
                 self.pipeline.append((ovr_val, clf))
                 self.thresholds.append(best/100)
+                self.rest_precision.append(scores[0][0])
                 self.mask = np.logical_or(self.mask, y == ovr_val)
 
                 if eval_set is not None:
@@ -779,8 +786,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return self
 
-    def attach_ovr_model(self, clf, ovr_val, threshold, X, y=None,
-                         eval_set=None, drop_cols=None):
+    def attach_ovr_model(self, clf, ovr_val, threshold, rest_precision,
+                         X, y=None, eval_set=None, drop_cols=None):
         '''
         Attaches an OVR model to the OrderedOVRClassifier prediction pipeline
 
@@ -793,6 +800,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             OVR classification value to attach to pipeline.
         threshold: float
             Threshold for positive binary classification for ovr_val.
+        rest_precision: float
+            Precision score for the False class in OVR classification.
         X: array-like, shape = [n_samples, n_features]
             Original input data used in OrderedOVRClassifier training. Used to
             add indicator values for masking classification value from future
@@ -830,6 +839,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         self.ovr_vals.append(ovr_val)
         self.pipeline.append((ovr_val, clf))
         self.thresholds.append(threshold)
+        self.rest_precision.append(rest_precision)
         self.mask = np.logical_or(self.mask, y == ovr_val)
 
         if eval_set is not None:
@@ -1111,8 +1121,9 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         estimators. If positive predictions are found in earlier steps of the
         pipeline, the probabilities are normalized so that the probability of
         positive prediction is reflected in the final probabilites. If negative
-        predictions are found in earlier steps of the pipeline, this function,
-        for now, returns 0% probability for the earlier prediction model steps.
+        predictions are found in earlier steps of the pipeline, this function
+        returns a dumb guesstimate of the class probability: the minimum of
+        1/n_features and 1-precision@threshold for the rest classification.
 
         Parameters
         ----------
@@ -1136,6 +1147,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         clf = self.pipeline[-1][1]
         self._xg_cleanup(clf)
         probas = clf.predict_proba(X)
+        current_features = probas.shape[1]
 
         # Initiate new array
         pred = np.zeros((n, m))
@@ -1144,10 +1156,15 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         # Set probabilities to ordered OVR predictions
         for i in np.arange(len(self.ovr_vals))[::-1]:
+            current_features += 1
+
             clf = self.pipeline[i][1]
             self._xg_cleanup(clf)
             ovr_proba = clf.predict_proba(X)[:, -1]
+
             thld = self.thresholds[i]
+            guess_prob = np.min([1 - self.rest_precision[i],
+                                 1 / current_features])
 
             # Recalibrate probability so that positive class predict_proba for
             # OVR falls within the [0.5, 1.0] range for thresholds below 0.5
@@ -1160,8 +1177,12 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             # Division to ensure probabilites are correct after normalization
             ovr_proba = ovr_proba / (1 - ovr_proba + 1e-10)
 
-            # Set probabilities and normalize
+            # Set probabilities and normalize. guess_prob for negative
+            # predictions will always be equal or less than the normalized
+            # average
             pred[mask, ovr_cols[i]] = ovr_proba[mask]
+            pred[~mask, :] = pred[~mask, :] * (1-guess_prob)
+            pred[~mask, ovr_cols[i]] = guess_prob
             pred /= np.sum(pred, axis=1)[:, np.newaxis]
 
         return pred
@@ -1207,8 +1228,9 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         steps of the pipeline, the probabilities are normalized so that the
         probability of positive prediction is reflected in the final
         probabilites. If negative predictions are found in earlier steps of the
-        pipeline, this function, for now, returns 0% probability for the
-        earlier prediction model steps.
+        pipeline, this function returns a dumb guesstimate of the class
+        probability: the minimum of 1/n_features and 1-precision@threshold for
+        the rest classification.
 
         Parameters
         ----------

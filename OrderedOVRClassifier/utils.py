@@ -31,6 +31,10 @@ def plot_thresholds(clf, X, y_true, title=None):
     -------
     best: float
         Threshold that maximizes the weighted f1 score.
+    scores_at_best: ([1, 3], [1, 3]) tuple
+        A tuple with the class [precision, recall, f1] scores at the best
+        threshold. 1st element contains scores for the False class and 2nd
+        element contains scores for the True class.
     '''
     probas = clf.predict_proba(X)
 
@@ -55,13 +59,15 @@ def plot_thresholds(clf, X, y_true, title=None):
     scores = np.array(scores)
     best = np.argmax(scores[:, 2])
 
-    cols0 = ['threshold', 'accuracy', 'f1_weighted']
-    cols1 = ['threshold', 'precision_class0', 'recall_class0', 'f1_class0']
-    cols2 = ['threshold', 'precision_class1', 'recall_class1', 'f1_class1']
+    cols = ['threshold', 'accuracy', 'f1_weighted']
+    cols0 = ['threshold', 'precision_class0', 'recall_class0', 'f1_class0']
+    cols1 = ['threshold', 'precision_class1', 'recall_class1', 'f1_class1']
 
-    scores = pd.DataFrame(scores, columns=cols0)
-    scores0 = pd.DataFrame(scores0, columns=cols1)
-    scores1 = pd.DataFrame(scores1, columns=cols2)
+    scores = pd.DataFrame(scores, columns=cols)
+    scores0 = pd.DataFrame(scores0, columns=cols0)
+    scores1 = pd.DataFrame(scores1, columns=cols1)
+    scores_at_best = (scores0.iloc[best, 1:].values,
+                      scores1.iloc[best, 1:].values)
 
     for df in [scores, scores0, scores1]:
         df = df.set_index('threshold')
@@ -81,7 +87,7 @@ def plot_thresholds(clf, X, y_true, title=None):
     print
     extended_classification_report(y_true, probas[:, 1] >= thlds[best])
 
-    return best
+    return best, scores_at_best
 
 
 def extended_classification_report(y_true, y_pred):
