@@ -56,7 +56,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
     LightGBM. If working with DataFrames, a fit model with early stopping can
     be called using a command as simple as:
 
-    > OrderedOVRClassifier(target='label').fit(X=train, eval_set=eval)
+    > OrderedOVRClassifier(target='label').fit(X=train_df, eval_set=eval_df)
 
     OrderedOVRClassifier also runs custom evaluation functions to diagnose
     and/or plot the predictive performance of the classification after training
@@ -150,6 +150,9 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         self.train_final_only = train_final_only
 
         # Set default values when no inputs specified
+        if self.ovr_vals is None:
+            self.ovr_vals = []
+
         if self.model_dict is None:
             self.model_dict = {}
 
@@ -738,7 +741,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return X, y, drop_cols
 
-    def attach_final_model(self, clf):
+    def attach_final_model(self, clf, X=None, y=None, drop_cols=None):
         '''
         Attaches (or replaces) a trained fitted model to the pipeline attribute
         of OrderedOVRClassifier.
@@ -749,6 +752,17 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Classifer for final step of OrderedOVRClassifier predictions. Model
             should be trained using the fit_test function to ensure
             compatibility.
+        X: array-like, shape = [n_samples, n_features], optional
+            Original input data used in OrderedOVRClassifier training. Used to
+            extract input_columns into self.input_cols for handling predictions
+            from DataFrames. Required if pipeline is empty.
+        y: array-like, shape = [n_samples, ], optional
+            True classification labels. Could be extracted from X input if X is
+            DataFrame and self.target attribute is set. Required if pipeline is
+            empty (which means LabelEncoder has not been fit).
+        drop_cols: list of str, optional
+            Labels of columns to ignore in modeling, only applicable to pandas
+            DataFrame X input.
 
         Returns
         -------
@@ -758,6 +772,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             if self.pipeline[-1][0] == 'final':
                 self.pipeline.pop()
         else:
+            X, y, drop_cols = self._xy_transform(X, y, drop_cols)
             self._le.fit(y)  # fit LabelEncoder
 
         self.pipeline.append(('final', clf))
@@ -863,7 +878,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         self._le.fit(y)  # fit LabelEncoder
 
         if not self.train_final_only:
-            if self.ovr_vals is None:
+            if len(self.ovr_vals) == 0:
                 # If not specified, sets ovr_vals as the majority class in the
                 # target variable by default. In practice, this just ensures
                 # that a positive prediction for the majority class will always
@@ -873,8 +888,6 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             # run _fit_ovr
             ovr_vals = self.ovr_vals
             self._fit_ovr(X, y, eval_set, ovr_vals, attach=True)
-        else:
-            self.ovr_vals = []
 
         if self.train_final_model or self.train_final_only:
             # Fit the final model and attach to pipeline
