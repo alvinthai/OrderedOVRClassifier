@@ -210,7 +210,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             self.__getattribute__('pipeline').append((ovr_val, model))
 
         if ovr_val != 'final':
-            self.__getattribute__('ovr_vals').append(ovr_val)
+            if ovr_val not in self.ovr_vals:
+                self.__getattribute__('ovr_vals').append(ovr_val)
 
     def _encode_y(self, y, eval_y=None, lgbm_grid=False):
         '''
@@ -474,7 +475,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
                 'thresholds': best/100,
                 'rest_precision': scores[0][0],
                 'mask': np.logical_or(self.mask, y == ovr_val),
-                '_le': enc
+                '_le': enc,
+                'ovr_val': ovr_val
             }
 
             if eval_set is not None:
@@ -486,7 +488,6 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
                 self.__updateattr__(model_attr)
 
             else:  # model is being trained in test without pipeline attachment
-                model_attr.update({'ovr_val': ovr_val})
                 return u.OOVR_Model(model_attr)
 
             print
@@ -657,7 +658,10 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             out of data.
         '''
         if self.mask is None:
-            return X, y, eval_set[0][0], eval_set[0][1]
+            if eval_set is not None:
+                return X, y, eval_set[0][0], eval_set[0][1]
+            else:
+                return X, y, None, None
 
         Xm = X[~self.mask]
         ym = y[~self.mask]
@@ -697,6 +701,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         if self.pipeline[-1][0] != 'final':
             raise RuntimeError('A final model needs to be fit to make '
                                'predictions.')
+
+        pipeline_ovrs = [x[0] for x in self.pipeline[:-1]]
+
+        if pipeline_ovrs != self.ovr_vals:
+            raise RuntimeError('Bad Pipeline! Please fit/attach OrderedOVR'
+                               'Classifier in the sequence specified '
+                               'by the user-inputted ovr_vals.')
 
         if X.__class__ == pd.DataFrame:
             if drop_cols is None:
@@ -762,12 +773,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         if drop_cols is None:
             drop_cols = []
 
-        if self.target:
+        if self.target is not None:
             drop_cols.append(self.target)
 
         if y is not None:
             y = pd.Series(y)
-        elif self.target:  # set y from pandas DataFrame if self.target is set
+        elif self.target is not None:
+            # set y from pandas DataFrame if self.target is set
             y = X[self.target].copy()
         else:
             raise AssertionError('Please initiate class with a label for '
@@ -982,7 +994,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         eval_set = self._eval_set(eval_set, drop_cols)
         Xm, ym, eval_X, eval_y = self._mask_datasets(X, y, eval_set, ovr_val)
 
-        if not ovr_val:
+        if lgbm_grid:
             ym, eval_y, _ = self._encode_y(ym, eval_y, lgbm_grid)
 
         _, fit_params = self._get_model('final', eval_X, eval_y, grid_model)
@@ -1002,8 +1014,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         print
         print '-'*80
         print 'best_params:\n{}\n'.format(grid_model.best_params_)
-        print 'best {0} score:\n{1}'.format(grid_model.scoring,
-                                            grid_model.best_score_)
+
+        if type(grid_model.scoring) == str:
+            print 'best {0} score:\n{1}'.format(grid_model.scoring,
+                                                grid_model.best_score_)
+        else:
+            print 'best score:\n{}'.format(grid_model.best_score_)
+
         print '-'*80
         print
 
@@ -1223,14 +1240,25 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         row = self._json_transform(row)
 
         for i in xrange(len(self.ovr_vals)):
-            clf = self.pipeline[i][1]
+            ovr_val, clf = self.pipeline[i]
+
+            if ovr_val != self.ovr_vals[i]:
+                raise RuntimeError('Bad pipeline! Please fit/attach Ordered'
+                                   'OVRClassifier in the sequence specified '
+                                   'by the user-inputted ovr_vals.')
+
             self._xg_cleanup(clf)
             pred = clf.predict(row)
 
             if pred[0] == 1:
                 return self.ovr_vals[i]
 
-        clf = self.pipeline[-1][1]
+        step, clf = self.pipeline[-1][1]
+
+        if step != 'final':
+            raise RuntimeError('A final model needs to be fit to make '
+                               'predictions.')
+
         self._xg_cleanup(clf)
         pred = clf.predict(row)
         pred = self._le.inverse_transform(pred)[0]

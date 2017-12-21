@@ -78,9 +78,6 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
         List of classes to compare against the trained classifier for
         ovr_val. If None, all other classes will be compared against the
         ovr_val class.
-    drop_cols: list of str, optional
-        Labels of columns to ignore in modeling, only applicable to pandas
-        DataFrame X input.
     '''
     if oovr.pipeline[-1][0] != 'final':
         raise AssertionError("Error: No final model attached.")
@@ -125,13 +122,13 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
     cols_slice = np.r_[ovr_idx, comp_idxs]
 
     # Repeat predictions over all thresholds with 0.01 interval spacing
-    pred_partial = np.repeat(pred_partial, 101)
-    proba_ovr = np.repeat(proba_ovr, 101)
-    thlds = np.tile(np.arange(0, 1.01, 0.01), len(y))
+    pred_partial = np.repeat(pred_partial, 100)
+    proba_ovr = np.repeat(proba_ovr, 100)
+    thlds = np.tile(np.arange(0, 1.00, 0.01), len(y))
 
     # Set predictions above or equal to threshold
     pred_partial[proba_ovr >= thlds] = ovr_val
-    pred_partial = pred_partial.reshape(-1, 101).T
+    pred_partial = pred_partial.reshape(-1, 100).T
 
     # ============================================================
     def accuracy_compute(y_pred):
@@ -151,7 +148,7 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
     accs = np.apply_along_axis(accuracy_compute, 1, pred_partial)
 
     # Plot accuracy as a function of threshold for OVR classifier
-    pd.DataFrame(accs, index=np.arange(0, 1.01, 0.01),
+    pd.DataFrame(accs, index=np.arange(0, 1.00, 0.01),
                  columns=['accuracy']).plot()
 
     plt.title('{} vs Threshold'.format(ovr_val))
@@ -159,7 +156,7 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
     plt.xlabel('thresholds')
     plt.xticks(np.arange(0, 1.01, 0.1))
     plt.legend(loc=2, bbox_to_anchor=(1, 1))
-    plt.grid(linestyle='--')
+    plt.grid(linestyle=':')
 
     plt.show(block=False)
 
@@ -173,7 +170,7 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
     # vs comparison classes
     for i, comp_val in enumerate(comp_vals, 1):
         subslice = np.r_[np.arange(3), np.arange(3*i, 3*i + 3)]
-        pd.DataFrame(prf[:, subslice], index=np.arange(0, 1.01, 0.01),
+        pd.DataFrame(prf[:, subslice], index=np.arange(0, 1.00, 0.01),
                      columns=cols[subslice]).plot()
 
         plt.title('{} vs {}'.format(ovr_val, comp_val))
@@ -182,7 +179,7 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
         plt.yticks(np.arange(0, 1.01, 0.1))
         plt.xticks(np.arange(0, 1.01, 0.1))
         plt.legend(loc=2, bbox_to_anchor=(1, 1), ncol=2)
-        plt.grid(linestyle='--')
+        plt.grid(linestyle=':')
 
         plt.show(block=False)
 
@@ -220,7 +217,7 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
     '''
     probas = clf.predict_proba(X)
 
-    thlds = np.arange(0, 1.01, .01)
+    thlds = np.arange(0, 1, 0.01)
     scores, scores0, scores1 = [], [], []
 
     if title is None:
@@ -270,7 +267,7 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
         plt.yticks(np.arange(0, 1.01, 0.1))
         plt.xticks(np.arange(0, 1.01, 0.1))
         plt.legend(loc=2, bbox_to_anchor=(1, 1))
-        plt.grid(linestyle='--')
+        plt.grid(linestyle=':')
 
         plt.show(block=False)
 
