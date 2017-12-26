@@ -1,8 +1,21 @@
-from __future__ import division
+from __future__ import division, print_function
+from matplotlib.ticker import FormatStrFormatter
+from sklearn.base import BaseEstimator, ClassifierMixin
+
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import sklearn.metrics as m
+
+try:
+    from modified_packages.skater_modified import PartialDependence
+    from skater.core.explanations import Interpretation
+    from skater.core.global_interpretation.feature_importance import FeatureImportance
+    from skater.model import InMemoryModel
+    skater_loaded = True
+except ImportError:
+    skater_loaded = False
 
 
 class OOVR_Model(object):
@@ -19,6 +32,89 @@ class OOVR_Model(object):
             self.__setattr__(k, v)
 
 
+class UniformClassifier(BaseEstimator, ClassifierMixin):
+    '''
+    Dumb classifier that predicts the same value for all predictions.
+
+    Parameters
+    ----------
+    val: str or numeric
+        Value to return in predictions.
+    '''
+    def __init__(self, val):
+        self.val = val
+
+    def fit(self, X=None, y=None):
+        return self
+
+    def predict(self, X):
+        return np.full(len(X), self.val)
+
+    def predict_proba(self, X):
+        return np.ones(len(X)).reshape(-1, 1)
+
+
+def check_eval_metric(clf, fit_params, eval_X, eval_y):
+    '''
+    A function for ensuring default metrics for early stopping
+    evaluation are compatible with xgboost and lightgbm. Also adds
+    eval_set into fit parameters for xgboost and lightgbm.
+
+    The default evaluation metric for binary classification is accuracy
+    and the default evaluation metric for multiclass classification is
+    multiclass logloss.
+
+    Parameters
+    ----------
+    clf: model
+        Unfitted model. Used to check the type of model being fitted.
+
+    fit_params: dict
+        Fit parameters to pass into clf.
+
+    eval_X: array-like, shape = [n_samples, n_features]
+        X input evaluation data for early stopping.
+
+    eval_y: array-like, shape = [n_samples, ]
+        True classification values to score early stopping.
+
+    Returns
+    -------
+    fit_params: dict
+        Early stopping compatible fit parameters to pass into clf.
+    '''
+    early_stop_berror = {'xgboost.sklearn': 'error',
+                         'lightgbm.sklearn': 'binary_error'}
+    early_stop_mlog = {'xgboost.sklearn': 'mlogloss',
+                       'lightgbm.sklearn': 'multi_logloss'}
+    berror = early_stop_berror.values()
+    mlog = early_stop_mlog.values()
+    module = clf.__module__
+
+    if module == 'sklearn.model_selection._search':
+        module = clf.estimator.__module__
+
+    if module in early_stop_berror:
+        fit_params['eval_set'] = [(eval_X, eval_y)]
+        binary = len(np.unique(eval_y)) == 2
+
+        if 'early_stopping_rounds' not in fit_params:
+            fit_params['early_stopping_rounds'] = 10
+
+        if 'eval_metric' not in fit_params:
+            if binary:
+                fit_params['eval_metric'] = early_stop_berror[module]
+            else:
+                fit_params['eval_metric'] = early_stop_mlog[module]
+        elif binary:
+            if fit_params['eval_metric'] in mlog:
+                fit_params['eval_metric'] = early_stop_berror[module]
+        elif fit_params['eval_metric'] in berror:
+            fit_params['eval_metric'] = early_stop_mlog[module]
+
+    return fit_params
+
+
 def extended_classification_report(y_true, y_pred):
     '''
     Extention of sklearn.metrics.classification_report. Builds a text report
@@ -29,6 +125,7 @@ def extended_classification_report(y_true, y_pred):
     ----------
     y_true: array-like, shape = [n_samples, ]
         Ground truth (correct) target values.
+
     y_pred: array-like, shape = [n_samples, ]
         Estimated targets as returned by a classifier.
     '''
@@ -58,6 +155,156 @@ def extended_classification_report(y_true, y_pred):
     print('\n'.join(output))
 
 
+def plot_2d_partial_dependence(oovr, X, col, col_names=None,
+                               grid_resolution=100, grid_range=(.05, 0.95),
+                               n_jobs=-1, progressbar=True):
+    '''
+    Wrapper function for calling the plot_partial_dependence function from
+    skater, which estimates the partial dependence of a column based on a
+    random sample of 1000 data points. To calculate partial dependencies the
+    following procedure is executed:
+
+    1. Pick a range of values (decided by the grid_resolution and grid_range
+       parameters) to calculate partial dependency for.
+    2. Loop over the values, one at a time, repeating steps 3-5 each time.
+    3. Replace the entire column corresponding to the variable of interest with
+       the current value that is being cycled over.
+    4. Use the model to predict the probabilities.
+    5. The (value, average_probability) becomes an (x, y) pair of the partial
+       dependence plot.
+
+    Parameters
+    ----------
+    oovr: OrderedOVRClassifier
+        Trained OrderedOVRClassifier model.
+
+    X: array-like, shape = [n_samples, n_features]
+        Input data used for training or evaluating the fitted model.
+
+    col: str
+        Label for the feature to compute partial dependence for.
+
+    col_names: list, optional
+        Names to call features.
+
+    grid_resolution: int, optional, default: 100
+        How many unique values to include in the grid. If the percentile range
+        is 5% to 95%, then that range will be cut into <grid_resolution>
+        equally size bins.
+
+    grid_range: (float, float) tuple, optional, default: (.05, 0.95)
+        The percentile extrama to consider. 2 element tuple, increasing,
+        bounded between 0 and 1.
+
+    n_jobs: int, optional, default: -1
+        The number of CPUs to use to compute the partial dependence. -1 means
+        'all CPUs' (default).
+
+    progressbar: bool, optional, default: True
+        Whether to display progress. This affects which function we use to
+        multipool the function execution, where including the progress bar
+        results in 10-20% slowdowns.
+    '''
+    if not skater_loaded:
+        raise RuntimeError("Skater is required but not installed. Please "
+                           "install skater with 'pip install skater' to use "
+                           "this function.")
+
+    target_names = ['predicted_' + str(x) for x in oovr._le.classes_]
+
+    interpreter = Interpretation(X, feature_names=col_names)
+    interpreter.logger.handlers = [logging.StreamHandler()]
+
+    pdep = PartialDependence(interpreter)
+    pyint_model = InMemoryModel(oovr.predict_proba, target_names=target_names,
+                                examples=X)
+
+    fig = pdep.plot_partial_dependence([col], pyint_model, with_variance=False,
+                                       grid_resolution=grid_resolution,
+                                       grid_range=grid_range, n_jobs=n_jobs,
+                                       progressbar=progressbar)
+
+    for i, f in enumerate(fig[0]):
+        if f.__module__ == 'matplotlib.axes._subplots':
+            f.yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+            f.set_title('Partial Dependence Plot')
+
+    plt.show()
+
+
+def plot_feature_importance(oovr, X, y, col_names=None, filter_class=None,
+                            n_jobs=-1, progressbar=True):
+    '''
+    Wrapper function for calling the plot_feature_importance function from
+    skater, which estimates the feature importance of all columns based on a
+    random sample of 5000 data points. To calculate feature importance the
+    following procedure is executed:
+
+    1. Calculate the original probability predictions for each class.
+    2. Loop over the columns, one at a time, repeating steps 3-5 each time.
+    3. Replace the entire column corresponding to the variable of interest with
+       replacement values randomly sampled from the column of interest.
+    4. Use the model to predict the probabilities.
+    5. The (column, average_probability_difference) becomes an (x, y) pair of
+       the feature importance plot.
+    6. Normalize the average_probability_difference so the sum equals 1.
+
+    Parameters
+    ----------
+    oovr: OrderedOVRClassifier
+        Trained OrderedOVRClassifier model.
+
+    X: array-like, shape = [n_samples, n_features]
+        Input data used for training or evaluating the fitted model.
+
+    y: array-like, shape = [n_samples, ]
+        True labels for X.
+
+    col_names: list, optional
+        Names to call features.
+
+    filter_class: str or numeric, optional
+        If specified, the feature importances will only be calculated for y
+        data points matching class specified for filter_class.
+
+    n_jobs: int, optional, default: -1
+        The number of CPUs to use to compute the feature importances. -1 means
+        'all CPUs' (default).
+
+    progressbar: bool, optional, default: True
+        Whether to display progress. This affects which function we use to
+        multipool the function execution, where including the progress bar
+        results in 10-20% slowdowns.
+    '''
+    if not skater_loaded:
+        raise RuntimeError("Skater is required but not installed. Please "
+                           "install skater with 'pip install skater' to use "
+                           "this function.")
+
+    target_names = oovr._le.classes_
+
+    if filter_class is not None:
+        title = 'Feature Importances: Class = {}'.format(filter_class)
+        filter_class = list(filter_class)
+    else:
+        title = 'Feature Importances'
+
+    interpreter = Interpretation(X, training_labels=y, feature_names=col_names)
+    interpreter.logger.handlers = [logging.StreamHandler()]
+
+    feat = FeatureImportance(interpreter)
+    pyint_model = InMemoryModel(oovr.predict_proba, target_names=target_names,
+                                examples=X)
+
+    fig, ax = feat.plot_feature_importance(pyint_model, n_jobs=n_jobs,
+                                           progressbar=progressbar,
+                                           filter_classes=filter_class)
+    fig.set_size_inches(18.5, max(ax.get_ylim()[1] / 4, 10.5))
+    ax.set_title(title)
+
+    plt.show()
+
+
 def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
     '''
     Evaluates the effect of changing the threshold of an ordered OVR
@@ -66,25 +313,29 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
 
     Parameters
     ----------
-    oovr: Trained OrderedOVRClassifier model.
+    oovr: OrderedOVRClassifier
+        Trained OrderedOVRClassifier model.
+
     ovr_val: str, int, or float
         Class label to evaluate metrics against other classes.
+
     X: array-like, shape = [n_samples, n_features]
         Data used for predictions.
-    y: array-like, shape = [n_samples, ], optional
-        True labels for X. If not provided and X is a DataFrame, will
-        extract y column from X with the provided self.target value.
+
+    y: array-like, shape = [n_samples, ]
+        True labels for X.
+
     comp_vals: list of str, optional
         List of classes to compare against the trained classifier for
         ovr_val. If None, all other classes will be compared against the
         ovr_val class.
     '''
     if oovr.pipeline[-1][0] != 'final':
-        raise AssertionError("Error: No final model attached.")
+        raise RuntimeError("Error: No final model attached.")
 
     if ovr_val not in oovr.ovr_vals:
         msg = "Error: Can't plot dependencies for a non-ordered classifier."
-        raise AssertionError(msg)
+        raise RuntimeError(msg)
 
     if comp_vals is None:
         comp_vals = list(set(oovr._le.classes_) - set([ovr_val]))
@@ -199,10 +450,16 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
     ----------
     clf: model
         Fitted classifier with a predict_proba function.
+
     X: array-like, shape = [n_samples, n_features]
         Data to predict with classifier.
+
     y_true: array-like, shape = [n_samples, ]
         Ground truth (correct) target values.
+
+    beta: float, optional, default: 1.0
+        The strength of recall versus precision in the F-score.
+
     title: str, optional
         Title for plots.
 
@@ -210,6 +467,7 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
     -------
     best: float
         Threshold that maximizes the weighted fscore.
+
     scores_at_best: ([1, 3], [1, 3]) tuple
         A tuple with the class [precision, recall, fscore] scores at the best
         threshold. 1st element contains scores for the False class and 2nd
@@ -227,7 +485,8 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
         pred = probas[:, 1] >= thld
 
         p, r, f, s = m.precision_recall_fscore_support(y_true, pred, beta=beta,
-                                                       labels=[0, 1])
+                                                       labels=[0, 1],
+                                                       warn_for=())
         ac = m.accuracy_score(y_true, pred)
         fw = np.average(f, weights=s)
 
@@ -271,11 +530,11 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
 
         plt.show(block=False)
 
-    print '-'*80
-    print 'best_threshold:', thlds[best]
-    print 'pred_cnt:', (probas[:, 1] >= thlds[best]).sum()
-    print 'true_cnt:', y_true.sum()
-    print
+    print('-'*80)
+    print('best_threshold:', thlds[best])
+    print('pred_cnt:', (probas[:, 1] >= thlds[best]).sum())
+    print('true_cnt:', y_true.sum(), '\n')
+
     extended_classification_report(y_true, probas[:, 1] >= thlds[best])
 
     return best, scores_at_best

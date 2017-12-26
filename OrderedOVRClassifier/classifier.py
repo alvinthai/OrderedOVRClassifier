@@ -4,15 +4,15 @@ OrderedOVRClassifier
 
 # Author: Alvin Thai <alvinthai@gmail.com>
 
-from __future__ import division
+from __future__ import division, print_function
 import copy
 import datetime
 import json
+import logging
 import numpy as np
 import oovr_utils as u
 import pandas as pd
 import sklearn.metrics as m
-import warnings
 
 from collections import defaultdict
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -27,45 +27,53 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
     are moved into subsequent training with previous classifications filtered
     out. The advantages of using Ordered One-Vs-Rest Classification include:
 
-    1. Reducing training time. Most multi-classification predictive models use
+    1. Reduce training time by screening out classes that can be predicted with
+       high confidence. Most multi-classification predictive models use
        One-Vs-Rest approaches and the predicted outcome is simply the highest
        predicted (normalized) probability among all One-Vs-Rest trained models.
-       Performing One-Vs-Rest Classification in an ordered manner can reduce
-       training time (by virtue of having less classes to make predictions on)
-       for later modeling steps that may require heavy optimization.
+       If a highly predictive class exists among the multi-classification
+       labels, it could be advantageous to remove the highly predictive class
+       from future steps to reduce training time (by virtue of having less
+       classes to make predictions on) for later modeling steps that may
+       require heavy optimization.
 
-    2. Screening out classes that can be predicted with high confidence. If a
-       highly predictive class exists among the multi-classification labels,
-       it could be advantageous to remove the highly predictive class from
-       future steps to allow optimization on a smaller dataset where
-       differences among the remaining classes become more evident.
-
-    3. Evaluating the thresholds of a binary classifier against classification
+    2. Evaluating the thresholds of a binary classifier against classification
        metrics of all downstream predictive models. With Ordered One-Vs-Rest
        Classification, the binary outcome from an Ordered One-Vs-Rest model can
-       be optimized to achieve an ideal mix of accuracy / precision / recall
-       scores among each predictive class. Call the plot_oovr_dependencies
-       function on a trained final model to execute these evaluations.
+       be optimized to achieve an ideal mix of accuracy/precision/recall scores
+       among each predictive class. Call the plot_oovr_dependencies function on
+       a fully trained OrderedOVRClassifier model to execute these evaluations.
+
+    3. Mixing different classification algorithms. With an Ordered One-Vs-Rest
+       approach, the same machine learning algorithm is not required to be used
+       for predicting all classes. This gives the user more flexibility to
+       explore different combinations of algorithms to make final predictions.
 
     The API for OrderedOVRClassifier is designed to be user-friendly with
     pandas, numpy, and scikit-learn. There is built in functionality to support
     easy handling for early stopping on the sklearn wrapper for XGBoost and
-    LightGBM. If working with DataFrames, a fit model with early stopping can
-    be called using a command as simple as:
+    LightGBM. If working with DataFrames, fitting a model with early stopping
+    could be done using a command as simple as:
 
     > OrderedOVRClassifier(target='label').fit(X=train_df, eval_set=eval_df)
 
-    OrderedOVRClassifier also runs custom evaluation functions to diagnose
-    and/or plot the predictive performance of the classification after training
-    each model. There is also a grid search wrapper built into the API for
+    OrderedOVRClassifier runs custom evaluation functions to diagnose and/or
+    plot the predictive performance of the classification after training each
+    model. Additionally, a grid search wrapper is built into the API for
     hyper-parameter tuning against classification-subsetted datasets.
+
+    OrderedOVRClassifier also includes utilities for model agnostic evaluation
+    of feature importances and partial dependence. These model agnostic
+    evaluation utilities (plot_feature_importance and plot_partial_dependence)
+    require the skater library and are approximations based on a random sample
+    of the data.
 
     Parameters
     ----------
     target: str
         Label for target variable in pandas DataFrame. If provided, all future
         future inputs with an X DataFrame do not require an accompanying y
-        input as y will be extracted from the X DataFrame; however, the target
+        input, as y will be extracted from the X DataFrame; however, the target
         column must be included in the X DataFrame for all fitting steps if the
         target parameter is provided.
 
@@ -100,27 +108,11 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
     Attributes
     ----------
-    eval_mask: (boolean) array-like, shape = [n_samples, ]
-        An array equal to the n_samples of the evaluation set, if included by
-        the user for early stopping or out-of-training evaluation, when fitting
-        OrderedOVRClassifier. Used to filter out classes from previously
-        trained OVR models from future modeling steps. Note that if an OVR
-        model has been attached to the pipeline, the same dataset used to
-        evaluate the first OVR model must stay the same to evaluate future
-        OrderedOVRClassifier pipeline steps.
-
     input_cols: list of str, shape = [n_features]
         List of columns saved when initially fitting OrderedOVRClassifier.
         Column headers for future X and eval_set inputs (if trained using
         DataFrame) must match self.input_cols for training or prediction to
         proceed.
-
-    mask: (boolean) array-like, shape = [n_samples, ]
-        An array equal to the n_samples of the training set. Used to filter out
-        classes from previously trained OVR models from future modeling steps.
-        Note that if an OVR model has been attached to the pipeline, the same
-        dataset used to train the first OVR model must be used to train future
-        OrderedOVRClassifier pipeline steps.
 
     pipeline: list of (str, model) tuples
         A list of prediction steps to be performed by OrderedOVRClassifier.
@@ -139,14 +131,6 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, target=None, ovr_vals=None, model_dict=None,
                  model_fit_params=None, fbeta_weight=1.0,
                  train_final_model=True, train_final_only=False):
-        self._le = LabelEncoder()
-        self.eval_mask = None
-        self.input_cols = None
-        self.mask = None
-        self.pipeline = []
-        self.rest_precision = []
-        self.thresholds = []
-
         self.target = target
         self.ovr_vals = ovr_vals
         self.model_dict = model_dict
@@ -155,38 +139,18 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         self.train_final_model = train_final_model
         self.train_final_only = train_final_only
 
-        # Set default values when no inputs specified
-        if self.ovr_vals is None:
-            self.ovr_vals = []
+        self._le = LabelEncoder()
+        self._all_binary = False
+        self._eval_mask = None
+        self._mask = None
+        self.input_cols = None
+        self.pipeline = []
+        self.rest_precision = []
+        self.thresholds = []
 
-        if self.model_dict is None:
-            self.model_dict = {}
-
-        if 'final' not in self.model_dict:
-            for _ in xrange(1):
-                try:  # default model: xgboost if installed
-                    from xgboost import XGBClassifier
-                    self.model_dict['final'] = XGBClassifier()
-                    break
-
-                except ImportError:
-                    pass
-
-                try:  # if xgboost not found, next default: lightgbm
-                    from lightgbm import LGBMClassifier
-                    self.model_dict['final'] = LGBMClassifier(n_estimators=100)
-                    break
-
-                except ImportError:  # gradientboosting in absense of above
-                    from sklearn.ensemble import GradientBoostingClassifier
-                    self.model_dict['final'] = GradientBoostingClassifier()
-
-        if self.model_fit_params is None:
-            self.model_fit_params = defaultdict(dict)
-
-        for k in self.model_dict:
-            if k not in self.model_fit_params:
-                self.model_fit_params[k] = {}
+        self._logger = logging.Logger('')
+        self._logger.addHandler(logging.StreamHandler())
+        self._init_setup_defaults()
 
     def __updateattr__(self, attributes):
         '''
@@ -212,6 +176,38 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         if ovr_val != 'final':
             if ovr_val not in self.ovr_vals:
                 self.__getattribute__('ovr_vals').append(ovr_val)
+
+    def _check_ovr(self, y):
+        '''
+        Checks if self.ovr_vals contains valid classes. If self.ovr_vals
+        indicates the whole pipeline is a series of binary classifications,
+        the self._all_binary flag is set to True to indicate the final model
+        is not multiclass.
+
+        Parameters
+        ----------
+        y: array-like, shape = [n_samples, ]
+            True classification values for training data.
+
+        Returns
+        ------
+        ovr_vals: list
+            List of target values (and ordering) to perform ordered one-vs-rest
+        '''
+        classes = set(y.unique())
+        n_classes = len(classes)
+        n_foreign = len(set(self.ovr_vals) - classes)
+        n_remaining = len(classes - set(self.ovr_vals))
+
+        if n_foreign > 0:
+            msg = 'Invalid values passed in ovr_vals during initialization.'
+            raise RuntimeError(msg)
+
+        if n_remaining <= 1:
+            self.ovr_vals = self.ovr_vals[:n_classes-1]
+            self._all_binary = True
+
+        return self.ovr_vals
 
     def _encode_y(self, y, eval_y=None, lgbm_grid=False):
         '''
@@ -259,13 +255,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
     def _eval_set(self, eval_set, drop_cols):
         '''
         Cleans up eval_set into proper format for xgboost and lightgbm. If
-        eval_set is a DataFrame, unpacks it into (X, y) pair. Aside from
+        eval_set is a DataFrame, unpacks it into (X, y) tuple. Aside from
         xgboost/lightgbm, eval_set is also used to evaluate trained models on
         unseen data and validate grid searches.
 
         Parameters
         ----------
-        eval_set: DataFrame or list of (X, y) pair
+        eval_set: DataFrame or list of (X, y) tuple
             Dataset to use as validation set for early-stopping and/or scoring
             trained models.
 
@@ -274,7 +270,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         Returns
         -------
-        eval_set: list of (X, y) pair
+        eval_set: list of (X, y) tuple
             Cleaned up eval_set for further usage in OrderedOVRClassifier.
         '''
         if eval_set is None:
@@ -315,14 +311,18 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         X: array-like, shape = [n_samples, n_features]
             Training input data.
+
         y: array-like, shape = [n_samples, ]
-            True classification value for training data.
-        eval_set: list of (X, y) pair
+            True classification values for training data.
+
+        eval_set: list of (X, y) tuple
             Dataset to use as validation set for early-stopping and/or scoring
             trained models.
+
         attach: boolean
             Whether to attach the fitted model to the OrderedOVRClassifier
             pipeline.
+
         model: model, optional
             A model to test against X dataset with masked classifications.
 
@@ -348,21 +348,18 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         y_pred = enc.inverse_transform(y_pred)
 
         if not self.train_final_only:
-            print
-            print '-'*80
+            print('', '-'*80, sep='\n')
             u.extended_classification_report(y_true, y_pred)
 
         if attach:
             self.pipeline.append(('final', clf))
 
             if not self.train_final_only:
-                print '-'*80
-                print 'finished fit for remaining classes'
-                print '-'*80
-                print
+                prt = 'finished fit for remaining classes'
+                print('-'*80, prt, '-'*80, '', sep='\n')
         else:
-            model_attr = {'model': clf, 'enc': enc}
-            return u.OOVR_Model(model_attr)
+            fmodel_attr = {'model': clf, '_le': enc}
+            return u.OOVR_Model(fmodel_attr)
 
     def _fit_model(self, clf, X, y, key, fit_params):
         '''
@@ -372,12 +369,16 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         clf: model
             Unfitted model to train.
+
         X: array-like, shape = [n_samples, n_features]
             Training input data.
+
         y: array-like, shape = [n_samples, ]
-            True classification value for training data.
+            True classification values for training data.
+
         key: str
             Label from model_fit_params dict where fit_params was fetched.
+
         fit_params: dict
             Key-value pairs of optional arguments to pass into model fit
             function.
@@ -394,16 +395,14 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
                 if type(key) == str:
                     key = "self.model_fit_params['{}']".format(key)
 
-                warnings.simplefilter("always")
-                warnings.warn("\n\nWarning: incompatible fit_params found for "
-                              "model. Fit method will ignore parameters:"
-                              "\n\n{0}\n\n"
-                              "Please set {1} with compataible parameters to "
-                              "use custom fit parameters for the model. If "
-                              "{1} is not set, self.model_fit_params['final'] "
-                              "will be tried by default."
-                              .format(fit_params.keys(), key), stacklevel=9999)
-                warnings.simplefilter("default")
+                msg = str("Warning: incompatible fit_params found for model. "
+                          "Fit method will ignore parameters:\n\n{0}\n\n"
+                          "Please set {1} with compataible parameters to use "
+                          "custom fit parameters for the model. If {1} is not "
+                          "set, self.model_fit_params['final'] will be tried "
+                          "by default.".format(fit_params.keys(), key))
+
+                self._logger.warn(msg)
 
                 clf.fit(X, y)
         else:
@@ -421,22 +420,29 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         X: array-like, shape = [n_samples, n_features]
             Training input data.
+
         y: array-like, shape = [n_samples, ]
-            True classification value for training data.
-        eval_set: list of (X, y) pair
+            True classification values for training data.
+
+        eval_set: list of (X, y) tuple
             Dataset to use as validation set for early-stopping and/or scoring
             trained models.
+
         ovr_vals: list
             For each value in ovr_vals, the y values is turned into True/False
             labels for OVR modeling. Subsequent OVR model training will mask
             out classifications used in previous ovr_val trainings.
+
         fbeta_weight: float
             The strength of recall versus precision in the F-score.
+
         enc: LabelEncoder
             Fitted LabelEncoder for storage when testing models.
+
         attach: boolean
             Whether to attach the fitted model to the OrderedOVRClassifier
             pipeline.
+
         model: model, optional
             A model to test against X dataset with masked classifications.
 
@@ -447,11 +453,11 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             None). Otherwise, returns nothing.
         '''
         # Set mask to remove classes from future training steps.
-        if self.mask is None:
-            self.mask = np.zeros(len(y)).astype(bool)
+        if self._mask is None:
+            self._mask = np.zeros(len(y)).astype(bool)
 
-        if eval_set is not None and self.eval_mask is None:
-            self.eval_mask = np.zeros(len(eval_set[0][1])).astype(bool)
+        if eval_set is not None and self._eval_mask is None:
+            self._eval_mask = np.zeros(len(eval_set[0][1])).astype(bool)
 
         for ovr_val in ovr_vals:
             Xm, ym, eval_X, eval_y = self._mask_datasets(X, y, eval_set,
@@ -472,17 +478,17 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
             model_attr = {
                 'model': clf,
-                'thresholds': best/100,
+                'ovr_val': ovr_val,
                 'rest_precision': scores[0][0],
-                'mask': np.logical_or(self.mask, y == ovr_val),
+                'thresholds': best/100,
                 '_le': enc,
-                'ovr_val': ovr_val
+                '_mask': np.logical_or(self._mask, y == ovr_val)
             }
 
             if eval_set is not None:
-                eval_mask = np.logical_or(self.eval_mask,
+                eval_mask = np.logical_or(self._eval_mask,
                                           eval_set[0][1] == ovr_val)
-                model_attr.update({'eval_mask': eval_mask})
+                model_attr.update({'_eval_mask': eval_mask})
 
             if attach:  # add fitted model for ovr_val to the pipeline
                 self.__updateattr__(model_attr)
@@ -490,11 +496,14 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             else:  # model is being trained in test without pipeline attachment
                 return u.OOVR_Model(model_attr)
 
-            print
-            print '-'*80
-            print 'finished Ordered OVR fit for value: {}'.format(ovr_val)
-            print '-'*80
-            print
+            prt = 'finished Ordered OVR fit for value: {}'.format(ovr_val)
+            print('', '-'*80, prt, '-'*80, '', sep='\n')
+
+        if self._all_binary:
+            val = list(set(enc.classes_) - set(self.ovr_vals))
+            val = self._le.transform(val)[0]
+            fmodel_attr = {'model': u.UniformClassifier(val)}
+            self.__updateattr__(fmodel_attr)
 
         return
 
@@ -508,75 +517,26 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         key: str
             Label from dictionaries where model and fit_params will be fetched.
+
         eval_X: array-like, shape = [n_samples, n_features]
             X input evaluation data for early stopping.
+
         eval_y: array-like, shape = [n_samples, ]
             True classification values to score early stopping.
+
         model: model, optional
-            A model to test against X dataset with masked classifications.
-            If specified, does not retrieve model from model_dict with supplied
+            A model to test against X dataset with masked classifications. If
+            specified, does not retrieve model from model_dict with supplied
             key.
 
         Returns
         -------
         clf: model
             Unfitted model to use for later training.
+
         fit_params: dict
             Fit parameters to pass into clf.
         '''
-        def check_eval_metric(clf, fit_params):
-            '''
-            A function for ensuring default metrics for early stopping
-            evaluation are compatible with xgboost and lightgbm. Also adds
-            eval_set into fit parameters for xgboost and lightgbm.
-
-            The default evaluation metric for binary classification is accuracy
-            and the default evaluation metric for multiclass classification is
-            multiclass logloss.
-
-            Parameters
-            ----------
-            clf: model
-                Unfitted model. Used to check the type of model being fitted.
-            fit_params: dict
-                Fit parameters to pass into clf.
-
-            Returns
-            -------
-            fit_params: dict
-                Early stopping compatible fit parameters to pass into clf.
-            '''
-            early_stop_berror = {'xgboost.sklearn': 'error',
-                                 'lightgbm.sklearn': 'binary_error'}
-            early_stop_mlog = {'xgboost.sklearn': 'mlogloss',
-                               'lightgbm.sklearn': 'multi_logloss'}
-            berror = early_stop_berror.values()
-            mlog = early_stop_mlog.values()
-            module = clf.__module__
-
-            if module == 'sklearn.model_selection._search':
-                module = clf.estimator.__module__
-
-            if module in early_stop_berror:
-                fit_params['eval_set'] = [(eval_X, eval_y)]
-                binary = len(np.unique(eval_y)) == 2
-
-                if 'early_stopping_rounds' not in fit_params:
-                    fit_params['early_stopping_rounds'] = 10
-
-                if 'eval_metric' not in fit_params:
-                    if binary:
-                        fit_params['eval_metric'] = early_stop_berror[module]
-                    else:
-                        fit_params['eval_metric'] = early_stop_mlog[module]
-                elif binary:
-                    if fit_params['eval_metric'] in mlog:
-                        fit_params['eval_metric'] = early_stop_berror[module]
-                elif fit_params['eval_metric'] in berror:
-                    fit_params['eval_metric'] = early_stop_mlog[module]
-
-            return fit_params
-
         # If model_dict does not contain key passed into function, use final
         # model by default.
         default_m = self.model_dict['final']
@@ -590,9 +550,47 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         fit_params = copy.deepcopy(self.model_fit_params.get(key, default_p))
 
         if eval_X is not None:
-            fit_params = check_eval_metric(clf, fit_params)
+            fit_params = u.check_eval_metric(clf, fit_params, eval_X, eval_y)
 
         return clf, fit_params
+
+    def _init_setup_defaults(self):
+        '''
+        Function for assigning default values when user does not supply values
+        into the __init__ of OrderedOVRClassifier.
+        '''
+        # Set default values when no inputs specified
+        if self.ovr_vals is None:
+            self.ovr_vals = []
+
+        if self.model_dict is None:
+            self.model_dict = {}
+
+        if 'final' not in self.model_dict:
+            for _ in xrange(1):
+                try:  # default model: xgboost if installed
+                    from xgboost import XGBClassifier
+                    self.model_dict['final'] = XGBClassifier()
+                    break
+
+                except ImportError:
+                    pass
+
+                try:  # if xgboost not found, next default: lightgbm
+                    from lightgbm import LGBMClassifier
+                    self.model_dict['final'] = LGBMClassifier(n_estimators=100)
+                    break
+
+                except ImportError:  # gradientboosting in absense of above
+                    from sklearn.ensemble import GradientBoostingClassifier
+                    self.model_dict['final'] = GradientBoostingClassifier()
+
+        if self.model_fit_params is None:
+            self.model_fit_params = defaultdict(dict)
+
+        for k in self.model_dict:
+            if k not in self.model_fit_params:
+                self.model_fit_params[k] = {}
 
     def _json_transform(self, row):
         '''
@@ -617,10 +615,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         row = pd.Series(json.loads(row), index=self.input_cols)
 
         if all(row.isna()):
-            warnings.simplefilter('always')
-            warnings.warn('\n\nWarning: Missing values found in input',
-                          stacklevel=9999)
-            warnings.simplefilter('default')
+            self._logger.warn('Warning: Missing values found in input')
 
         row = row.values.reshape(1, -1)
 
@@ -636,11 +631,14 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         X: array-like, shape = [n_samples, n_features]
             Training input data.
+
         y: array-like, shape = [n_samples, ]
-            True classification value for training data.
-        eval_set: list of (X, y) pair
+            True classification values for training data.
+
+        eval_set: list of (X, y) tuple
             Dataset to use as validation set for early-stopping and/or scoring
             trained models.
+
         ovr_val: str, int, or float, optional
             Classification value to perform OVR training.
 
@@ -648,30 +646,33 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         --------
         Xm: array-like, shape = [<= n_samples, n_features]
             X with data from previously trained classes filtered out of data.
+
         ym: array-like, shape = [<= n_samples, ]
             y with data from previously trained classes filtered out of data.
+
         eval_X: array-like, shape = [<= n_samples, n_features]
             X from eval_set with data from previously trained classes filtered
             out of data.
+
         eval_y: array-like, shape = [<= n_samples, ]
             y from eval_set with data from previously trained classes filtered
             out of data.
         '''
-        if self.mask is None:
+        if self._mask is None:
             if eval_set is not None:
                 return X, y, eval_set[0][0], eval_set[0][1]
             else:
                 return X, y, None, None
 
-        Xm = X[~self.mask]
-        ym = y[~self.mask]
+        Xm = X[~self._mask]
+        ym = y[~self._mask]
 
         if ovr_val is not None:
             ym = ym == ovr_val
 
         if eval_set is not None:
-            eval_X = eval_set[0][0][~self.eval_mask]
-            eval_y = eval_set[0][1][~self.eval_mask]
+            eval_X = eval_set[0][0][~self._eval_mask]
+            eval_y = eval_set[0][1][~self._eval_mask]
 
             if ovr_val is not None:
                 eval_y = eval_y == ovr_val
@@ -689,6 +690,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         X: array-like, shape = [n_samples, n_features]
             Data used for predictions.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
@@ -699,8 +701,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Data with drop_cols removed.
         '''
         if self.pipeline[-1][0] != 'final':
-            raise RuntimeError('A final model needs to be fit to make '
-                               'predictions.')
+            msg = 'A final model needs to be fit to make predictions.'
+            raise RuntimeError(msg)
 
         pipeline_ovrs = [x[0] for x in self.pipeline[:-1]]
 
@@ -724,6 +726,49 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
                                          "if X columns match self.input_cols.")
 
         return X
+
+    def _skater_extract(self, X, n_jobs):
+        '''
+        Utility function passing parameters over to skater Interpretation and
+        InMemoryModel classes.
+
+        Parameters
+        ----------
+        X: array-like, shape = [n_samples, n_features]
+            Input data used for training or evaluating the fitted model.
+
+        n_jobs: int, optional, default: -1
+            The number of CPUs to use to compute with Skater. -1 means
+            'all CPUs' (default).
+
+        Returns
+        -------
+        X: array-like, shape = [n_samples, n_features]
+            Input data used for training or evaluating the fitted model,
+            converted to a numpy array.
+
+        n_jobs: int
+            The number of CPUs to use to compute with Skater. -1 means
+            'all CPUs' (default). Changes to 1 for models that don't support
+            multipooling.
+
+        col_names: list
+            Names to call features.
+        '''
+        if X.__class__ == pd.DataFrame:
+            col_names = X.columns
+            X = X.values
+        else:
+            col_names = None
+
+        no_multipooling = ['lightgbm.sklearn', 'sklearn.linear_model.logistic']
+
+        for _, clf in self.pipeline:
+            if clf.__module__ in no_multipooling:
+                n_jobs = 1
+                break
+
+        return X, n_jobs, col_names
 
     def _xg_cleanup(self, clf):
         '''
@@ -751,9 +796,11 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         X: array-like, shape = [n_samples, n_features]
             Input data. Can be DataFrame (with or without target column
             included) or numpy array.
+
         y: array-like, shape = [n_samples, ] or None
             True labels for X. If not provided and X is a DataFrame, column
             specified by self.target is extracted as the y output.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
@@ -763,8 +810,10 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         X: array-like, shape = [n_samples, <= n_features]
             Data for future modeling/predicting steps, with (if applicable)
             target and drop columns removed.
+
         y: array-like, shape = [n_samples, ]
             True labels for X.
+
         drop_cols: list of str
             Labels of columns to ignore in modeling, plus label of target
             variable if specifed on init, only applicable to pandas DataFrame X
@@ -782,9 +831,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             # set y from pandas DataFrame if self.target is set
             y = X[self.target].copy()
         else:
-            raise AssertionError('Please initiate class with a label for '
-                                 'target variable OR input a y parameter '
-                                 'into fit')
+            raise RuntimeError('Please initiate class with a label for target '
+                               'variable OR input a y parameter into fit')
 
         assert len(X) == len(y)
 
@@ -803,13 +851,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
     def attach_model(self, oovr_model):
         '''
-        Attaches an OVR model to the OrderedOVRClassifier prediction pipeline
+        Attaches an OVR model to the OrderedOVRClassifier prediction pipeline.
 
         Parameters
         ----------
         oovr_model: OOVR_Model
             OOVR_Model object returned from fit_test of fit_test_ovr functions.
-            OOVR_Model contains compatible OVR classifer to add to the
+            OOVR_Model contains compatible OVR classifier to add to the
             prediction pipeline of OrderedOVRClassifier.
 
         Returns
@@ -818,14 +866,15 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         '''
         if len(self.pipeline) > 0:
             if self.pipeline[-1][0] == 'final':
-                raise RuntimeError('Attach failed. Final model already '
-                                   'trained.')
+                msg = 'Attach failed. Final model already trained'
+                raise RuntimeError(msg)
 
         if hasattr(oovr_model, 'ovr_val'):
             ovr_val = oovr_model.ovr_val
             if ovr_val in self.ovr_vals:
-                raise RuntimeError('Attach failed. Model already trained for '
-                                   '{}'.format(ovr_val))
+                msg = 'Attach failed. Model already trained for {}'
+                msg = msg.format(ovr_val)
+                raise RuntimeError(msg)
 
         self.__updateattr__(oovr_model.__dict__)
 
@@ -850,12 +899,15 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         X: array-like, shape = [n_samples, n_features]
             Input data for model training.
+
         y: array-like, shape = [n_samples, ], optional
             True labels for X. If not provided and X is a DataFrame, will
             extract y column from X with the provided self.target value.
-        eval_set: DataFrame or list of (X, y) pair, optional
+
+        eval_set: DataFrame or list of (X, y) tuple, optional
             Dataset to use as validation set for early-stopping and/or scoring
             trained models.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
@@ -879,14 +931,16 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
                 self.ovr_vals = [y.value_counts().index.tolist()[0]]
 
             # run _fit_ovr
-            ovr_vals = self.ovr_vals
+            ovr_vals = self._check_ovr(y)
             fbeta_weight = self.fbeta_weight
-            self._fit_ovr(X, y, eval_set, ovr_vals, fbeta_weight, enc,
-                          attach=True)
+            self._fit_ovr(X, y, eval_set, ovr_vals, fbeta_weight, enc, True)
+        else:
+            self.ovr_vals = []
 
         if self.train_final_model or self.train_final_only:
-            # Fit the final model and attach to pipeline
-            self._fit_final_model(X, y, eval_set, attach=True, model=None)
+            if not self._all_binary:
+                # Fit the final model and attach to pipeline
+                self._fit_final_model(X, y, eval_set, True)
 
             if eval_set is not None:
                 y_true = eval_set[0][1]
@@ -895,17 +949,14 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
                 y_true = y
                 y_pred = self.predict(X)
 
-            print
-            print '-'*80
-            print 'OVERALL REPORT'
-            print
+            print('-'*80, 'OVERALL REPORT', '', sep='\n')
+
             u.extended_classification_report(y_true, y_pred)
             stop = datetime.datetime.now()
-            duration = stop-start
-            print('total training time: {0:.1f} minutes'
-                  .format(duration.total_seconds()/60))
-            print
-            print '-'*80
+            duration = (stop-start).total_seconds()/60
+
+            prt = 'total training time: {0:.1f} minutes'.format(duration)
+            print(prt, '', '-'*80, sep='\n')
 
         return self
 
@@ -916,20 +967,28 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         OrderedOVRClassifier. Also evaluates classification with the imported
         extended_classification_report function.
 
+        Note that if an OVR model has been attached to the pipeline, the same
+        dataset(s) used to train/evaluate the first OVR model must be used to
+        train future OrderedOVRClassifier pipeline steps.
+
         Parameters
         ----------
         model: model
             Unfitted model to test against dataset, which may have
             classification values masked if previous OVR training has been
             attached to pipeline.
+
         X: array-like, shape = [n_samples, n_features]
             Input data for model training.
+
         y: array-like, shape = [n_samples, ], optional
             True labels for X. If not provided and X is a DataFrame, will
             extract y column from X with the provided self.target value.
-        eval_set: DataFrame or list of (X, y) pair, optional
+
+        eval_set: DataFrame or list of (X, y) tuple, optional
             Dataset to use as validation set for early-stopping and/or scoring
             trained models.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
@@ -957,22 +1016,31 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         OrderedOVRClassifier API against a (possibly) classification-masked X
         dataset.
 
+        Note that if an OVR model has been attached to the pipeline, the same
+        dataset(s) used to train/evaluate the first OVR model must be used to
+        train future OrderedOVRClassifier pipeline steps.
+
         Parameters
         ----------
         grid_model: GridSearchCV or RandomizedSearchCV model
             Hyper-parameter optimizer model from the sklearn.model_selection
             library. Must be initiated with base estimator and parameter grid.
+
         X: array-like, shape = [n_samples, n_features]
             Input data for model training.
+
         y: array-like, shape = [n_samples, ], optional
             True labels for X. If not provided and X is a DataFrame, will
             extract y column from X with the provided self.target value.
-        eval_set: DataFrame or list of (X, y) pair, optional
+
+        eval_set: DataFrame or list of (X, y) tuple, optional
             Dataset to use as validation set for early-stopping and/or scoring
             trained models.
+
         ovr_val: str, int, or float, optional
             If specified, fit_test_grid will perform OVR modeling against the
             ovr_val classification label.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
@@ -1011,18 +1079,16 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         grid_model = self._fit_model(grid_model, X, y, 'final', fit_params)
 
-        print
-        print '-'*80
-        print 'best_params:\n{}\n'.format(grid_model.best_params_)
+        prt = 'best_params:\n{}\n'.format(grid_model.best_params_)
+        print('', '-'*80, prt, sep='\n')
 
         if type(grid_model.scoring) == str:
-            print 'best {0} score:\n{1}'.format(grid_model.scoring,
-                                                grid_model.best_score_)
+            print('best {0} score:\n{1}'.format(grid_model.scoring,
+                                                grid_model.best_score_))
         else:
-            print 'best score:\n{}'.format(grid_model.best_score_)
+            print('best score:\n{}'.format(grid_model.best_score_))
 
-        print '-'*80
-        print
+        print('-'*80, '', sep='\n')
 
         return grid_model
 
@@ -1035,22 +1101,31 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         imported plot_thresholds function, which plots precision, recall, and
         fscores for all thresholds with 0.01 interval spacing.
 
+        Note that if an OVR model has been attached to the pipeline, the same
+        dataset(s) used to train/evaluate the first OVR model must be used to
+        train future OrderedOVRClassifier pipeline steps.
+
         Parameters
         ----------
         model: model
             Unfitted model to test against dataset, which may have
             classification values masked if previous OVR training has been
             attached to pipeline.
+
         ovr_val: str, int, or float
             Classification value to perform OVR training.
+
         X: array-like, shape = [n_samples, n_features]
             Input data for model training.
+
         y: array-like, shape = [n_samples, ], optional
             True labels for X. If not provided and X is a DataFrame, will
             extract y column from X with the provided self.target value.
-        eval_set: DataFrame or list of (X, y) pair, optional
+
+        eval_set: DataFrame or list of (X, y) tuple, optional
             Dataset to use as validation set for early-stopping and/or scoring
             trained models.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
@@ -1077,6 +1152,55 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return model
 
+    def plot_feature_importance(self, X, y=None, filter_class=None, n_jobs=-1,
+                                progressbar=True, drop_cols=None):
+        '''
+        Wrapper function for calling the plot_feature_importance function from
+        skater, which estimates the feature importance of all columns based on
+        a random sample of 5000 data points. To calculate feature importance
+        the following procedure is executed:
+
+        1. Calculate the original probability predictions for each class.
+        2. Loop over the columns, one at a time, repeating steps 3-5 each time.
+        3. Replace the entire column corresponding to the variable of interest
+           with replacement values randomly sampled from the column of interest
+        4. Use the model to predict the probabilities.
+        5. The (column, average_probability_difference) becomes an (x, y) pair
+           of the feature importance plot.
+        6. Normalize the average_probability_difference so the sum equals 1.
+
+        Parameters
+        ----------
+        X: array-like, shape = [n_samples, n_features]
+            Input data used for training or evaluating the fitted model.
+
+        y: array-like, shape = [n_samples, ], optional
+            True labels for X. If not provided and X is a DataFrame, will
+            extract y column from X with the provided self.target value.
+
+        filter_class: str or numeric, optional
+            If specified, the feature importances will only be calculated for y
+            data points matching class specified for filter_class.
+
+        n_jobs: int, optional, default: -1
+            The number of CPUs to use to compute the feature importances. -1
+            means 'all CPUs' (default).
+
+        progressbar: bool, optional, default: True
+            Whether to display progress. This affects which function we use to
+            multipool the function execution, where including the progress bar
+            results in 10-20% slowdowns.
+
+        drop_cols: list of str, optional
+            Labels of columns to ignore in modeling, only applicable to pandas
+            DataFrame X input.
+        '''
+        X, y, _ = self._xy_transform(X, y, drop_cols)
+        X, n_jobs, col_names = self._skater_extract(X, n_jobs)
+
+        return u.plot_feature_importance(self, X, y, col_names, filter_class,
+                                         n_jobs, progressbar)
+
     def plot_oovr_dependencies(self, ovr_val, X, y=None, comp_vals=None,
                                drop_cols=None):
         '''
@@ -1088,21 +1212,80 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         ovr_val: str, int, or float
             Class label to evaluate metrics against other classes.
+
         X: array-like, shape = [n_samples, n_features]
             Data used for predictions.
+
         y: array-like, shape = [n_samples, ], optional
             True labels for X. If not provided and X is a DataFrame, will
             extract y column from X with the provided self.target value.
+
         comp_vals: list of str, optional
             List of classes to compare against the trained classifier for
             ovr_val. If None, all other classes will be compared against the
             ovr_val class.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
         '''
         X, y, _ = self._xy_transform(X, y, drop_cols)
         return u.plot_oovr_dependencies(self, ovr_val, X, y, comp_vals)
+
+    def plot_partial_dependence(self, X, col, grid_resolution=100,
+                                grid_range=(.05, 0.95), n_jobs=-1,
+                                progressbar=True, drop_cols=None):
+        '''
+        Wrapper function for calling the plot_partial_dependence function from
+        skater, which estimates the partial dependence of a column based on a
+        random sample of 1000 data points. To calculate partial dependencies
+        the following procedure is executed:
+
+        1. Pick a range of values (decided by the grid_resolution and
+           grid_range parameters) to calculate partial dependency for.
+        2. Loop over the values, one at a time, repeating steps 3-5 each time.
+        3. Replace the entire column corresponding to the variable of interest
+           with the current value that is being cycled over.
+        4. Use the model to predict the probabilities.
+        5. The (value, average_probability) becomes an (x, y) pair of the
+           partial dependence plot.
+
+        Parameters
+        ----------
+        X: array-like, shape = [n_samples, n_features]
+            Input data used for training or evaluating the fitted model.
+
+        col: str
+            Label for the feature to compute partial dependence for.
+
+        grid_resolution: int, optional, default: 100
+            How many unique values to include in the grid. If the percentile
+            range is 5% to 95%, then that range will be cut into
+            <grid_resolution> equally size bins.
+
+        grid_range: (float, float) tuple, optional, default: (.05, 0.95)
+            The percentile extrama to consider. 2 element tuple, increasing,
+            bounded between 0 and 1.
+
+        n_jobs: int, optional, default: -1
+            The number of CPUs to use to compute the partial dependence. -1
+            means 'all CPUs' (default).
+
+        progressbar: bool, optional, default: True
+            Whether to display progress. This affects which function we use to
+            multipool the function execution, where including the progress bar
+            results in 10-20% slowdowns.
+
+        drop_cols: list of str, optional
+            Labels of columns to ignore in modeling, only applicable to pandas
+            DataFrame X input.
+        '''
+        X = self._pred_cleanup(X, drop_cols)
+        X, n_jobs, col_names = self._skater_extract(X, n_jobs)
+
+        return u.plot_2d_partial_dependence(self, X, col, col_names,
+                                            grid_resolution, grid_range,
+                                            n_jobs, progressbar)
 
     def predict(self, X, start=0, drop_cols=None):
         '''
@@ -1115,9 +1298,11 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         X: array-like, shape = [n_samples, n_features]
             Data used for predictions.
+
         start: int, optional, default: 0
             Index of the prediction pipeline to start on. Defaults to 0 (makes
             prediction through full pipeline).
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
@@ -1128,95 +1313,30 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Predicted multi-class targets.
         '''
         X = self._pred_cleanup(X, drop_cols)
+        pred = np.zeros(len(X))
+        mask = np.zeros(len(X)).astype(bool)
 
-        # Get predictions for final model
-        clf = self.pipeline[-1][1]
-        self._xg_cleanup(clf)
-        pred = self.pipeline[-1][1].predict(X)
-
-        # Inverse label transform
-        pred = self._le.inverse_transform(pred)
-
-        # Set values to ordered OVR predictions
-        for i in np.arange(len(self.ovr_vals))[start:][::-1]:
+        # predictions from the One-Vs-Rest classifiers
+        for i in np.arange(len(self.ovr_vals))[start:]:
             clf = self.pipeline[i][1]
             self._xg_cleanup(clf)
 
             thld = self.thresholds[i]
-            mask = clf.predict_proba(X)[:, 1] >= thld
-            pred[mask] = self.ovr_vals[i]
+            pred_clf = clf.predict_proba(X[~mask])[:, 1] >= thld
+            pred[np.where(~mask)[0][pred_clf]] = self.ovr_vals[i]
 
-        return pred
+            mask[~mask] = np.logical_or(mask[~mask], pred_clf)
 
-    def predict_proba(self, X, drop_cols=None):
-        '''
-        Predict probabilities for multi-class targets using underlying
-        estimators. If positive predictions are found in earlier steps of the
-        pipeline, the probabilities are normalized so that the probability of
-        positive prediction is reflected in the final probabilites. If negative
-        predictions are found in earlier steps of the pipeline, this function
-        returns a dumb guesstimate of the class probability: the minimum of
-        1/n_features and 1-precision@threshold for the rest classification.
+            if all(mask):  # all classifications have been made
+                return pred
 
-        Parameters
-        ----------
-        X: array-like, shape = [n_samples, n_features]
-            Data used for predictions.
-        drop_cols: list of str, optional
-            Labels of columns to ignore in modeling, only applicable to pandas
-            DataFrame X input.
+        clf_final = self.pipeline[-1][1]
+        self._xg_cleanup(clf_final)
 
-        Returns
-        -------
-        pred: array-like, shape = [n_samples, n_classes]
-            Returns the probability of the sample for each class in the model,
-            where classes are ordered as they are in self._le.classes_.
-        '''
-        X = self._pred_cleanup(X, drop_cols)
-        n, m = len(X), len(self._le.classes_)
-        ovr_cols = self._le.transform(self.ovr_vals)
-
-        # Get predictions for final model
-        clf = self.pipeline[-1][1]
-        self._xg_cleanup(clf)
-        probas = clf.predict_proba(X)
-        current_features = probas.shape[1]
-
-        # Initiate new array
-        pred = np.zeros((n, m))
-        proba_cols = np.setdiff1d(np.arange(m), ovr_cols)
-        pred[:, proba_cols] = probas
-
-        # Set probabilities to ordered OVR predictions
-        for i in np.arange(len(self.ovr_vals))[::-1]:
-            current_features += 1
-
-            clf = self.pipeline[i][1]
-            self._xg_cleanup(clf)
-            ovr_proba = clf.predict_proba(X)[:, -1]
-
-            thld = self.thresholds[i]
-            guess_prob = np.min([1 - self.rest_precision[i],
-                                 1 / current_features])
-
-            # Recalibrate probability so that positive class predict_proba for
-            # OVR falls within the [0.5, 1.0] range for thresholds below 0.5
-            if thld < 0.5:
-                ovr_proba = 0.5 + (ovr_proba - thld) / (2 * (1-thld))
-                mask = ovr_proba >= 0.5
-            else:
-                mask = ovr_proba >= thld
-
-            # Division to ensure probabilites are correct after normalization
-            ovr_proba = ovr_proba / (1 - ovr_proba + 1e-10)
-
-            # Set probabilities and normalize. guess_prob for negative
-            # predictions will always be equal or less than the normalized
-            # average
-            pred[mask, ovr_cols[i]] = ovr_proba[mask]
-            pred[~mask, :] = pred[~mask, :] * (1-guess_prob)
-            pred[~mask, ovr_cols[i]] = guess_prob
-            pred /= np.sum(pred, axis=1)[:, np.newaxis]
+        # predictions from the final classifier
+        pred_final = clf_final.predict(X[~mask])
+        pred_final = self._le.inverse_transform(pred_final)
+        pred[~mask] = pred_final
 
         return pred
 
@@ -1238,62 +1358,177 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Predicted multi-class target for input row data.
         '''
         row = self._json_transform(row)
+        pred = self.predict2(row)[0]
+        return pred
 
-        for i in xrange(len(self.ovr_vals)):
-            ovr_val, clf = self.pipeline[i]
+    def predict_proba(self, X, drop_cols=None, score_type='uniform'):
+        '''
+        Predict probabilities for multi-class targets using underlying
+        estimators. Because each classifier is trained against different
+        classes in Ordered One-Vs-Rest modeling, it is not possible to output
+        accurate probabilities that always return the correct prediction (from
+        the predict function) for the most probable class. Instead, the
+        following score_type methods are used to output probability estimates.
 
-            if ovr_val != self.ovr_vals[i]:
-                raise RuntimeError('Bad pipeline! Please fit/attach Ordered'
-                                   'OVRClassifier in the sequence specified '
-                                   'by the user-inputted ovr_vals.')
+        If the score_type is 'raw', the probability score from the specific
+        model used to train the class of interest is returned for each class.
+        There are no corrections applied for the 'raw' score_type and the
+        outputted probabilities will not sum to 1.
 
-            self._xg_cleanup(clf)
-            pred = clf.predict(row)
+        If the score_type is 'chained', the probability of the next classifier
+        in the pipeline is scaled down so the probabilities sum to the negative
+        ('rest') classification probability of the current classifier.
 
-            if pred[0] == 1:
-                return self.ovr_vals[i]
+        If the score type is 'uniform', positive values for Ordered One-Vs_Rest
+        classifications are treated in the same manner as the 'chained'
+        score_type. Negative ('rest') outcomes always return a uniform value
+        based on the 1-precision score for the 'rest' class of the binary model
+        used in the pipeline step for the One-Vs-Rest classifier. This ensures
+        that future pipeline models that sub-classify the 'rest' classification
+        will always sum up to the same number, allowing more meaningful
+        interpretation of the probabilities.
 
-        step, clf = self.pipeline[-1][1]
+        Parameters
+        ----------
+        X: array-like, shape = [n_samples, n_features]
+            Data used for predictions.
 
-        if step != 'final':
-            raise RuntimeError('A final model needs to be fit to make '
-                               'predictions.')
+        drop_cols: list of str, optional
+            Labels of columns to ignore in modeling, only applicable to pandas
+            DataFrame X input.
 
+        score_type: str, optional, default: 'uniform'
+            Acceptable inputs are 'raw', 'chained', and 'uniform'.
+
+        Returns
+        -------
+        pred: array-like, shape = [n_samples, n_classes]
+            Returns the probability of the sample for each class in the model,
+            where classes are ordered as they are in self._le.classes_.
+        '''
+        X = self._pred_cleanup(X, drop_cols)
+        n, m = len(X), len(self._le.classes_)
+        ovr_cols = self._le.transform(self.ovr_vals)
+
+        # Get predictions for final model
+        clf = self.pipeline[-1][1]
         self._xg_cleanup(clf)
-        pred = clf.predict(row)
-        pred = self._le.inverse_transform(pred)[0]
+        probas = clf.predict_proba(X)
+
+        # Initiate new array
+        pred = np.zeros((n, m))
+        proba_cols = np.setdiff1d(np.arange(m), ovr_cols)
+        pred[:, proba_cols] = probas
+
+        # Set probabilities
+        for i in np.arange(len(self.ovr_vals))[::-1]:
+            clf = self.pipeline[i][1]
+            self._xg_cleanup(clf)
+            ovr_proba = clf.predict_proba(X)[:, -1]
+
+            if score_type == 'raw':
+                pred[:, ovr_cols[i]] = ovr_proba
+
+            elif score_type == 'chained' or self._all_binary:
+                pred *= (1 - ovr_proba)[:, np.newaxis]
+                pred[:, ovr_cols[i]] = ovr_proba
+
+            elif score_type == 'uniform':
+                thld = self.thresholds[i]
+                guess_prob = 1 - self.rest_precision[i]
+                mask = ovr_proba >= thld
+
+                # chained predictions for positive results
+                pred[mask] *= (1 - ovr_proba[mask])[:, np.newaxis]
+                pred[mask, ovr_cols[i]] = ovr_proba[mask]
+
+                # use uniform probability for negative results
+                pred[~mask, :] = pred[~mask, :] * (1-guess_prob)
+                pred[~mask, ovr_cols[i]] = guess_prob
+
+            else:
+                raise RuntimeError('Bad input for score_type.')
 
         return pred
 
-    def predict_proba_json(self, row, print_prob=False):
+    def predict_proba_json(self, row, score_type='uniform', print_prob=False):
         '''
         Predict probabilities for multi-class target from JSON using
-        underlying estimators. If positive predictions are found in earlier
-        steps of the pipeline, the probabilities are normalized so that the
-        probability of positive prediction is reflected in the final
-        probabilites. If negative predictions are found in earlier steps of the
-        pipeline, this function returns a dumb guesstimate of the class
-        probability: the minimum of 1/n_features and 1-precision@threshold for
-        the rest classification.
+        underlying estimators. Because each classifier is trained against
+        different classes in Ordered One-Vs-Rest modeling, it is not possible
+        to output accurate probabilities that always return the correct
+        prediction for the most probable class. Instead, the following
+        score_type methods are used to output probability estimates.
+
+        If the score_type is 'raw', the probability score from the specific
+        model used to train the class of interest is returned for each class.
+        There are no corrections applied for the 'raw' score_type and the
+        outputted probabilities will not sum to 1.
+
+        If the score_type is 'chained', the probability of the next classifier
+        in the pipeline is scaled down so the probabilities sum to the negative
+        ('rest') classification probability of the current classifier.
+
+        If the score type is 'uniform', positive values for Ordered One-Vs_Rest
+        classifications are treated in the same manner as the 'chained'
+        score_type. Negative ('rest') outcomes always return a uniform value
+        based on the 1-precision score for the 'rest' class of the binary model
+        used in the pipeline step for the One-Vs-Rest classifier. This ensures
+        that future pipeline models that subclassify the 'rest' classification
+        will always sum up to the same number, allowing more meaniningful
+        interpretation of the probabilities.
 
         Parameters
         ----------
         row: json
             Single JSON row to make prediction from.
 
+        score_type: str, optional, default: 'uniform'
+            Acceptable inputs are 'raw', 'chained', and 'uniform'.
+
+        print_prob: bool, optional
+            Whether to print out the probabilities to console.
+
         Returns
         -------
-        pred: array-like, shape = [1, n_classes]
+        pred: array-like, shape = [1, n_classes] or None
             Returns the probability of the sample for each class in the model,
-            where classes are ordered as they are in self._le.classes_.
+            where classes are ordered as they are in self._le.classes_ or
+            returns None if print_prob is True.
         '''
         row = self._json_transform(row)
-        pred = self.predict_proba(row)
+        pred = self.predict_proba(row, score_type=score_type)[0]
 
         if print_prob:
-            ljust = max([len(x) for x in self._le.classes_]) + 1
-            for i, p in enumerate(pred[0]):
-                print "{}: {:.3f}".format(self._le.classes_[i].ljust(ljust), p)
+            ljust = max([len(str(x)) for x in self._le.classes_]) + 1
+
+            if score_type == 'raw':
+                m = len(self._le.classes_)
+                ovr_cols = self._le.transform(self.ovr_vals)
+                proba_cols = np.setdiff1d(np.arange(m), ovr_cols)
+
+                # print out the raw probabilities for each classifier in the
+                # same order as the modeling pipeline
+                for i, c in enumerate(ovr_cols):
+                    label = str(self._le.classes_[c])
+                    prt1 = 'OVR Classifier, Class {}'.format(self.ovr_vals[i])
+                    prt2 = '{}: {:.3f}'.format(label.ljust(ljust), pred[c])
+                    print(prt1, '-'*len(prt1), prt2, '', sep='\n')
+
+                prt = 'Classifier for Remaining Classes:'
+                print(prt, '-'*len(prt), sep='\n')
+
+                for i, c in enumerate(proba_cols):
+                    label = str(self._le.classes_[c])
+                    print('{}: {:.3f}'.format(label.ljust(ljust), pred[c]))
+
+            else:
+                # print out probabilities in ascening class label order
+                for i, p in enumerate(pred):
+                    label = str(self._le.classes_[i])
+                    print('{}: {:.3f}'.format(label.ljust(ljust), p))
+
+            return
 
         return pred
 
@@ -1305,10 +1540,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         ----------
         X: array-like, shape = [n_samples, n_features]
             Test samples.
+
         y: array-like, shape = [n_samples, ], optional
             True labels for X.
+
         sample_weight: array-like, shape = [n_samples], optional
             Sample weights.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
