@@ -1,6 +1,10 @@
 API Reference
 =============
 
+.. _`[View source on GitHub]`: https://github.com/alvinthai/OrderedOVRClassifier/blob/master/OrderedOVRClassifier/classifier.py
+
+`[View source on GitHub]`_
+
 .. py:class:: OrderedOVRClassifier(target=None, ovr_vals=None, model_dict=None, model_fit_params=None, fbeta_weight=1.0, train_final_model=True, train_final_only=False)
 
   **Description**
@@ -14,13 +18,13 @@ API Reference
        oovr = OrderedOVRClassifier(target='label')
        oovr.fit(X=train_df, eval_set=eval_df)
 
-    .. _jupyter_notebook: http://nbviewer.jupyter.org/github/alvinthai/OrderedOVRClassifier/blob/master/examples/example.ipynb
+    .. _`jupyter notebook`: http://nbviewer.jupyter.org/github/alvinthai/OrderedOVRClassifier/blob/master/examples/example.ipynb
 
-    Refer to this jupyter_notebook_ for specific examples of how to use the API for OrderedOVRClassifier.
+    Refer to this `jupyter notebook`_ for specific examples of how to use the API for OrderedOVRClassifier.
 
     OrderedOVRClassifier runs custom evaluation functions to diagnose and/or plot the predictive performance of the classification after training each model. With Ordered One-Vs-Rest Classification, the binary outcome from an Ordered One-Vs-Rest model can be optimized to achieve an ideal mix of accuracy/precision/recall scores among each predictive class. Call the :class:`plot_oovr_dependencies` function on a fully trained OrderedOVRClassifier model to execute these evaluations.
 
-    OrderedOVRClassifier is designed to be modular and models can be tested without changing the fit state of the OrderedOVRClassifier. These models can be manually attached to OrderedOVRClassifier at a later time. Additionally, a grid search wrapper is built into the API for hyper-parameter tuning against classification-subsetted datasets.
+    OrderedOVRClassifier is designed to be modular and models can be tested without changing the fit state of OrderedOVRClassifier. These models can be manually attached to OrderedOVRClassifier at a later time. Additionally, a grid search wrapper is built into the API for hyper-parameter tuning against classification-subsetted datasets.
 
     OrderedOVRClassifier also includes utilities for model agnostic evaluation of feature importances and partial dependence. These model agnostic evaluation utilities (:class:`plot_feature_importance` and :class:`plot_partial_dependence`) require the skater library and are approximations based on a random sample of the data.
 
@@ -58,6 +62,44 @@ API Reference
 
       train_final_only: bool, default: False
           Whether to ignore OVR modeling and to train the final model only.
+
+  **Methods**
+
+      +-----------------------------------------------------------------------------------------------------------+
+      | **Core API**                                                                                              |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`fit` (X[, y, eval_Set, drop_cols])                                                                |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`predict` (X[, start, drop_cols])                                                                  |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`predict_proba` (X[, score_type, drop_cols])                                                       |
+      +-----------------------------------------------------------------------------------------------------------+
+      | **Plotting API**                                                                                          |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`plot_feature_importance` (X[, y, filter_class, n_jobs, progressbar, drop_cols])                   |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`plot_partial_dependence` (X, col[, grid_resolution, grid_range, n_jobs, progressbar, drop_cols])  |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`plot_oovr_dependencies` (ovr_val, X[, y, comp_vals, drop_cols])                                   |
+      +-----------------------------------------------------------------------------------------------------------+
+      | **Model Selection API**                                                                                   |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test` (model, X[, y, eval_set, drop_cols])                                                    |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test_ovr` (model, ovr_val, X[, y, eval_set, drop_cols])                                       |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test_grid` (grid_model, X[, y, eval_set, ovr_val, drop_cols])                                 |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`attach_model` (oovr_model)                                                                        |
+      +-----------------------------------------------------------------------------------------------------------+
+      | **Miscellaneous API**                                                                                     |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`predict_json` (row)                                                                               |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`predict_proba_json` (row[, score_type, print_prob])                                               |
+      +-----------------------------------------------------------------------------------------------------------+
+      | :class:`score` (X[, y, sample_weight, drop_cols])                                                         |
+      +-----------------------------------------------------------------------------------------------------------+
 
 Core API
 --------
@@ -115,7 +157,7 @@ Core API
           Predicted multi-class targets.
 
 
-.. py:method:: OrderedOVRClassifier.predict_proba(self, X, drop_cols=None, score_type='uniform')
+.. py:method:: OrderedOVRClassifier.predict_proba(self, X, score_type='uniform', drop_cols=None)
 
   **Description**
 
@@ -132,11 +174,11 @@ Core API
       X: array-like, shape = [n_samples, n_features]
           Data used for predictions.
 
-      drop_cols: list of str, optional
-          Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
-
       score_type: str, optional, default: 'uniform'
           Acceptable inputs are 'raw', 'chained', and 'uniform'.
+
+      drop_cols: list of str, optional
+          Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
 
   **Returns**
 
@@ -345,7 +387,7 @@ Model Selection API
   **Parameters**
 
       oovr_model: OOVR_Model
-          OOVR_Model object returned from fit_test of fit_test_ovr functions. OOVR_Model contains compatible OVR classiifer to add to the prediction pipeline of OrderedOVRClassifier.
+          OOVR_Model object returned from fit_test of fit_test_ovr functions. OOVR_Model contains compatible OVR classifier to add to the prediction pipeline of OrderedOVRClassifier.
 
   **Returns**
 
