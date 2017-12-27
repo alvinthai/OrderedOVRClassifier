@@ -36,7 +36,9 @@
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
     <link rel="top" title="OrderedOVRClassifier 1.0.0 documentation" href="index.html"/>
-        <link rel="prev" title="Welcome to OrderedOVRClassifier’s documentation!" href="index.html"/> 
+        <link rel="prev" title="Welcome to OrderedOVRClassifier’s documentation!" href="index.html"/>
+    <link href="_static/my_theme.css" rel="stylesheet" type="text/css">
+
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -175,7 +177,7 @@
 <span class="n">oovr</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">train_df</span><span class="p">,</span> <span class="n">eval_set</span><span class="o">=</span><span class="n">eval_df</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Refer to this <a class="reference external" href="http://nbviewer.jupyter.org/github/alvinthai/OrderedOVRClassifier/blob/master/examples/example.ipynb">jupyter notebook</a> for specific examples of how to use the API for OrderedOVRClassifier.</p>
+<p>Refer to this <a class="reference external" href="http://nbviewer.jupyter.org/github/alvinthai/OrderedOVRClassifier/blob/master/examples/example.ipynb">notebook</a> for a tutorial on how to use the API for OrderedOVRClassifier.</p>
 <p>OrderedOVRClassifier runs custom evaluation functions to diagnose and/or plot the predictive performance of the classification after training each model. With Ordered One-Vs-Rest Classification, the binary outcome from an Ordered One-Vs-Rest model can be optimized to achieve an ideal mix of accuracy/precision/recall scores among each predictive class. Call the <a class="reference internal" href="#OrderedOVRClassifier.plot_oovr_dependencies" title="OrderedOVRClassifier.plot_oovr_dependencies"><code class="xref py py-class docutils literal"><span class="pre">plot_oovr_dependencies</span></code></a> function on a fully trained OrderedOVRClassifier model to execute these evaluations.</p>
 <p>OrderedOVRClassifier is designed to be modular and models can be tested without changing the fit state of OrderedOVRClassifier. These models can be manually attached to OrderedOVRClassifier at a later time. Additionally, a grid search wrapper is built into the API for hyper-parameter tuning against classification-subsetted datasets.</p>
 <p>OrderedOVRClassifier also includes utilities for model agnostic evaluation of feature importances and partial dependence. These model agnostic evaluation utilities (<a class="reference internal" href="#OrderedOVRClassifier.plot_feature_importance" title="OrderedOVRClassifier.plot_feature_importance"><code class="xref py py-class docutils literal"><span class="pre">plot_feature_importance</span></code></a> and <a class="reference internal" href="#OrderedOVRClassifier.plot_partial_dependence" title="OrderedOVRClassifier.plot_partial_dependence"><code class="xref py py-class docutils literal"><span class="pre">plot_partial_dependence</span></code></a>) require the skater library and are approximations based on a random sample of the data.</p>
@@ -228,9 +230,9 @@
 </tr>
 <tr class="row-odd"><td><strong>Plotting API</strong></td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.plot_feature_importance" title="OrderedOVRClassifier.plot_feature_importance"><code class="xref py py-class docutils literal"><span class="pre">plot_feature_importance</span></code></a> (X[, y, filter_class, n_jobs, progressbar, drop_cols])</td>
+<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.plot_feature_importance" title="OrderedOVRClassifier.plot_feature_importance"><code class="xref py py-class docutils literal"><span class="pre">plot_feature_importance</span></code></a> (X[, y, filter_class, n_jobs, n_samples, progressbar, drop_cols])</td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.plot_partial_dependence" title="OrderedOVRClassifier.plot_partial_dependence"><code class="xref py py-class docutils literal"><span class="pre">plot_partial_dependence</span></code></a> (X, col[, grid_resolution, grid_range, n_jobs, progressbar, drop_cols])</td>
+<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.plot_partial_dependence" title="OrderedOVRClassifier.plot_partial_dependence"><code class="xref py py-class docutils literal"><span class="pre">plot_partial_dependence</span></code></a> (X, col[, grid_resolution, grid_range, n_jobs, n_samples, progressbar, drop_cols])</td>
 </tr>
 <tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.plot_oovr_dependencies" title="OrderedOVRClassifier.plot_oovr_dependencies"><code class="xref py py-class docutils literal"><span class="pre">plot_oovr_dependencies</span></code></a> (ovr_val, X[, y, comp_vals, drop_cols])</td>
 </tr>
@@ -246,11 +248,13 @@
 </tr>
 <tr class="row-even"><td><strong>Miscellaneous API</strong></td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.predict_json" title="OrderedOVRClassifier.predict_json"><code class="xref py py-class docutils literal"><span class="pre">predict_json</span></code></a> (row)</td>
+<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.multiclassification_report" title="OrderedOVRClassifier.multiclassification_report"><code class="xref py py-class docutils literal"><span class="pre">multiclassification_report</span></code></a> (X[, y, drop_cols])</td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.predict_proba_json" title="OrderedOVRClassifier.predict_proba_json"><code class="xref py py-class docutils literal"><span class="pre">predict_proba_json</span></code></a> (row[, score_type, print_prob])</td>
+<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.predict_json" title="OrderedOVRClassifier.predict_json"><code class="xref py py-class docutils literal"><span class="pre">predict_json</span></code></a> (row)</td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.score" title="OrderedOVRClassifier.score"><code class="xref py py-class docutils literal"><span class="pre">score</span></code></a> (X[, y, sample_weight, drop_cols])</td>
+<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.predict_proba_json" title="OrderedOVRClassifier.predict_proba_json"><code class="xref py py-class docutils literal"><span class="pre">predict_proba_json</span></code></a> (row[, score_type, print_prob])</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.score" title="OrderedOVRClassifier.score"><code class="xref py py-class docutils literal"><span class="pre">score</span></code></a> (X[, y, sample_weight, drop_cols])</td>
 </tr>
 </tbody>
 </table>
@@ -301,7 +305,7 @@
 <dt>start: int, optional, default: 0</dt>
 <dd>Index of the prediction pipeline to start on. Defaults to 0 (makes prediction through full pipeline).</dd>
 <dt>drop_cols: list of str, optional</dt>
-<dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dd>Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
@@ -331,7 +335,7 @@
 <dt>score_type: str, optional, default: &#8216;uniform&#8217;</dt>
 <dd>Acceptable inputs are &#8216;raw&#8217;, &#8216;chained&#8217;, and &#8216;uniform&#8217;.</dd>
 <dt>drop_cols: list of str, optional</dt>
-<dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dd>Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
@@ -348,7 +352,7 @@
 <h2>Plotting API<a class="headerlink" href="#plotting-api" title="Permalink to this headline">¶</a></h2>
 <dl class="method">
 <dt id="OrderedOVRClassifier.plot_feature_importance">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">plot_feature_importance</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>y=None</em>, <em>filter_class=None</em>, <em>n_jobs=-1</em>, <em>progressbar=True</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.plot_feature_importance" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">plot_feature_importance</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>y=None</em>, <em>filter_class=None</em>, <em>n_jobs=-1</em>, <em>n_samples=5000</em>, <em>progressbar=True</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.plot_feature_importance" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>Wrapper function for calling the plot_feature_importance function from skater, which estimates the feature importance of all columns based on a random sample of 5000 data points. To calculate feature importance the following procedure is executed:</p>
@@ -357,7 +361,7 @@
 <li>Loop over the columns, one at a time, repeating steps 3-5 each time.</li>
 <li>Replace the entire column corresponding to the variable of interest with replacement values randomly sampled from the column of interest</li>
 <li>Use the model to predict the probabilities.</li>
-<li>The (column, average_probability_difference) becomes an (x, y) pair of the feature importance plot.</li>
+<li>The (column, average_absolute_probability_difference) becomes an (x, y) pair of the feature importance plot.</li>
 <li>Normalize the average_probability_difference so the sum equals 1.</li>
 </ol>
 </div></blockquote>
@@ -372,17 +376,19 @@
 <dd>If specified, the feature importances will only be calculated for y data points matching class specified for filter_class.</dd>
 <dt>n_jobs: int, optional, default: -1</dt>
 <dd>The number of CPUs to use to compute the feature importances. -1 means &#8216;all CPUs&#8217; (default).</dd>
+<dt>n_samples: int, optional, default: 5000</dt>
+<dd>How many samples to use when computing importance.</dd>
 <dt>progressbar: bool, optional, default: True</dt>
 <dd>Whether to display progress. This affects which function we use to multipool the function execution, where including the progress bar results in 10-20% slowdowns.</dd>
 <dt>drop_cols: list of str, optional</dt>
-<dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dd>Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.</dd>
 </dl>
 </div></blockquote>
 </dd></dl>
 
 <dl class="method">
 <dt id="OrderedOVRClassifier.plot_partial_dependence">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">plot_partial_dependence</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>col</em>, <em>grid_resolution=100</em>, <em>grid_range=(.05</em>, <em>0.95)</em>, <em>n_jobs=-1</em>, <em>progressbar=True</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.plot_partial_dependence" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">plot_partial_dependence</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>col</em>, <em>grid_resolution=100</em>, <em>grid_range=(.05</em>, <em>0.95)</em>, <em>n_jobs=-1</em>, <em>n_samples=1000</em>, <em>progressbar=True</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.plot_partial_dependence" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>Wrapper function for calling the plot_partial_dependence function from skater, which estimates the partial dependence of a column based on a random sample of 1000 data points. To calculate partial dependencies the following procedure is executed:</p>
@@ -407,10 +413,12 @@
 <dd>The percentile extrama to consider. 2 element tuple, increasing, bounded between 0 and 1.</dd>
 <dt>n_jobs: int, optional, default: -1</dt>
 <dd>The number of CPUs to use to compute the partial dependence. -1 means &#8216;all CPUs&#8217; (default).</dd>
+<dt>n_samples: int, optional, default: 1000</dt>
+<dd>How many samples to use when computing partial dependence.</dd>
 <dt>progressbar: bool, optional, default: True</dt>
 <dd>Whether to display progress. This affects which function we use to multipool the function execution, where including the progress bar results in 10-20% slowdowns.</dd>
 <dt>drop_cols: list of str, optional</dt>
-<dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dd>Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.</dd>
 </dl>
 </div></blockquote>
 </dd></dl>
@@ -433,7 +441,7 @@
 <dt>comp_vals: list of str, optional</dt>
 <dd>List of classes to compare against the trained classifier for ovr_val. If None, all other classes will be compared against the ovr_val class.</dd>
 <dt>drop_cols: list of str, optional</dt>
-<dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dd>Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.</dd>
 </dl>
 </div></blockquote>
 </dd></dl>
@@ -446,7 +454,7 @@
 <code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test</code><span class="sig-paren">(</span><em>self</em>, <em>model</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
-<div><p>Function for training a final model against a (possibly) classification masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates classification with the imported extended_classification_report function.</p>
+<div><p>Function for training a final model against a (possibly) classification-masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates classification with the imported extended_classification_report function.</p>
 <p>Note that if an OVR model has been attached to the pipeline, the same dataset(s) used to train/evaluate the first OVR model must be used to train future OrderedOVRClassifier pipeline steps.</p>
 </div></blockquote>
 <p><strong>Parameters</strong></p>
@@ -478,7 +486,7 @@
 <code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test_ovr</code><span class="sig-paren">(</span><em>self</em>, <em>model</em>, <em>ovr_val</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test_ovr" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
-<div><p>Function for training an OVR model against a (possibly) classification masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates binary classification with the imported plot_thresholds function, which plots precision, recall, and fscores for all thresholds with 0.01 interval spacing.</p>
+<div><p>Function for training an OVR model against a (possibly) classification-masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates binary classification with the imported plot_thresholds function, which plots precision, recall, and fscores for all thresholds with 0.01 interval spacing.</p>
 <p>Note that if an OVR model has been attached to the pipeline, the same dataset(s) used to train/evaluate the first OVR model must be used to train future OrderedOVRClassifier pipeline steps.</p>
 </div></blockquote>
 <p><strong>Parameters</strong></p>
@@ -563,6 +571,25 @@
 <div class="section" id="miscellaneous-api">
 <h2>Miscellaneous API<a class="headerlink" href="#miscellaneous-api" title="Permalink to this headline">¶</a></h2>
 <dl class="method">
+<dt id="OrderedOVRClassifier.multiclassification_report">
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">multiclassification_report</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>y=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.multiclassification_report" title="Permalink to this definition">¶</a></dt>
+<dd><p><strong>Description</strong></p>
+<blockquote>
+<div>Wrapper function for extended_classification_report, which is an extension of <a class="reference external" href="http://scikit-learn.org/stable/modules/generated/sklearn.metrics.classification_report.html">sklearn.metrics.classification_report</a>. Builds a text report showing the main classification metrics and the total count of multiclass predictions per class.</div></blockquote>
+<p><strong>Parameters</strong></p>
+<blockquote>
+<div><dl class="docutils">
+<dt>X: array-like, shape = [n_samples, n_features]</dt>
+<dd>Data used for predictions.</dd>
+<dt>y: array-like, shape = [n_samples, ], optional</dt>
+<dd>True labels for X. If not provided and X is a DataFrame, will extract y column from X with the provided self.target value.</dd>
+<dt>drop_cols: list of str, optional</dt>
+<dd>Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.</dd>
+</dl>
+</div></blockquote>
+</dd></dl>
+
+<dl class="method">
 <dt id="OrderedOVRClassifier.predict_json">
 <code class="descclassname">OrderedOVRClassifier.</code><code class="descname">predict_json</code><span class="sig-paren">(</span><em>self</em>, <em>row</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.predict_json" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
@@ -630,7 +657,7 @@
 <dt>sample_weight: array-like, shape = [n_samples], optional</dt>
 <dd>Sample weights.</dd>
 <dt>drop_cols: list of str, optional</dt>
-<dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dd>Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
