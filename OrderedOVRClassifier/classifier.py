@@ -1361,7 +1361,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         pred = self.predict2(row)[0]
         return pred
 
-    def predict_proba(self, X, drop_cols=None, score_type='uniform'):
+    def predict_proba(self, X, score_type='uniform', drop_cols=None):
         '''
         Predict probabilities for multi-class targets using underlying
         estimators. Because each classifier is trained against different
@@ -1393,12 +1393,12 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         X: array-like, shape = [n_samples, n_features]
             Data used for predictions.
 
+        score_type: str, optional, default: 'uniform'
+            Acceptable inputs are 'raw', 'chained', and 'uniform'.
+
         drop_cols: list of str, optional
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
-
-        score_type: str, optional, default: 'uniform'
-            Acceptable inputs are 'raw', 'chained', and 'uniform'.
 
         Returns
         -------
