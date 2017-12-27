@@ -18,9 +18,9 @@ API Reference
        oovr = OrderedOVRClassifier(target='label')
        oovr.fit(X=train_df, eval_set=eval_df)
 
-    .. _`jupyter notebook`: http://nbviewer.jupyter.org/github/alvinthai/OrderedOVRClassifier/blob/master/examples/example.ipynb
+    .. _notebook: http://nbviewer.jupyter.org/github/alvinthai/OrderedOVRClassifier/blob/master/examples/example.ipynb
 
-    Refer to this `jupyter notebook`_ for specific examples of how to use the API for OrderedOVRClassifier.
+    Refer to this notebook_ for a tutorial on how to use the API for OrderedOVRClassifier.
 
     OrderedOVRClassifier runs custom evaluation functions to diagnose and/or plot the predictive performance of the classification after training each model. With Ordered One-Vs-Rest Classification, the binary outcome from an Ordered One-Vs-Rest model can be optimized to achieve an ideal mix of accuracy/precision/recall scores among each predictive class. Call the :class:`plot_oovr_dependencies` function on a fully trained OrderedOVRClassifier model to execute these evaluations.
 
@@ -65,41 +65,43 @@ API Reference
 
   **Methods**
 
-      +-----------------------------------------------------------------------------------------------------------+
-      | **Core API**                                                                                              |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`fit` (X[, y, eval_Set, drop_cols])                                                                |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`predict` (X[, start, drop_cols])                                                                  |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`predict_proba` (X[, score_type, drop_cols])                                                       |
-      +-----------------------------------------------------------------------------------------------------------+
-      | **Plotting API**                                                                                          |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`plot_feature_importance` (X[, y, filter_class, n_jobs, progressbar, drop_cols])                   |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`plot_partial_dependence` (X, col[, grid_resolution, grid_range, n_jobs, progressbar, drop_cols])  |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`plot_oovr_dependencies` (ovr_val, X[, y, comp_vals, drop_cols])                                   |
-      +-----------------------------------------------------------------------------------------------------------+
-      | **Model Selection API**                                                                                   |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test` (model, X[, y, eval_set, drop_cols])                                                    |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test_ovr` (model, ovr_val, X[, y, eval_set, drop_cols])                                       |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test_grid` (grid_model, X[, y, eval_set, ovr_val, drop_cols])                                 |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`attach_model` (oovr_model)                                                                        |
-      +-----------------------------------------------------------------------------------------------------------+
-      | **Miscellaneous API**                                                                                     |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`predict_json` (row)                                                                               |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`predict_proba_json` (row[, score_type, print_prob])                                               |
-      +-----------------------------------------------------------------------------------------------------------+
-      | :class:`score` (X[, y, sample_weight, drop_cols])                                                         |
-      +-----------------------------------------------------------------------------------------------------------+
+      +----------------------------------------------------------------------------------------------------------------------+
+      | **Core API**                                                                                                         |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`fit` (X[, y, eval_Set, drop_cols])                                                                           |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`predict` (X[, start, drop_cols])                                                                             |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`predict_proba` (X[, score_type, drop_cols])                                                                  |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | **Plotting API**                                                                                                     |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`plot_feature_importance` (X[, y, filter_class, n_jobs, n_samples, progressbar, drop_cols])                   |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`plot_partial_dependence` (X, col[, grid_resolution, grid_range, n_jobs, n_samples, progressbar, drop_cols])  |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`plot_oovr_dependencies` (ovr_val, X[, y, comp_vals, drop_cols])                                              |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | **Model Selection API**                                                                                              |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test` (model, X[, y, eval_set, drop_cols])                                                               |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test_ovr` (model, ovr_val, X[, y, eval_set, drop_cols])                                                  |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test_grid` (grid_model, X[, y, eval_set, ovr_val, drop_cols])                                            |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`attach_model` (oovr_model)                                                                                   |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | **Miscellaneous API**                                                                                                |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`multiclassification_report` (X[, y, drop_cols])                                                              |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`predict_json` (row)                                                                                          |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`predict_proba_json` (row[, score_type, print_prob])                                                          |
+      +----------------------------------------------------------------------------------------------------------------------+
+      | :class:`score` (X[, y, sample_weight, drop_cols])                                                                    |
+      +----------------------------------------------------------------------------------------------------------------------+
 
 Core API
 --------
@@ -149,7 +151,7 @@ Core API
           Index of the prediction pipeline to start on. Defaults to 0 (makes prediction through full pipeline).
 
       drop_cols: list of str, optional
-          Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
+          Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.
 
   **Returns**
 
@@ -178,7 +180,7 @@ Core API
           Acceptable inputs are 'raw', 'chained', and 'uniform'.
 
       drop_cols: list of str, optional
-          Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
+          Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.
 
   **Returns**
 
@@ -188,7 +190,7 @@ Core API
 Plotting API
 ------------
 
-.. py:method:: OrderedOVRClassifier.plot_feature_importance(self, X, y=None, filter_class=None, n_jobs=-1, progressbar=True, drop_cols=None)
+.. py:method:: OrderedOVRClassifier.plot_feature_importance(self, X, y=None, filter_class=None, n_jobs=-1, n_samples=5000, progressbar=True, drop_cols=None)
 
   **Description**
 
@@ -215,13 +217,16 @@ Plotting API
       n_jobs: int, optional, default: -1
           The number of CPUs to use to compute the feature importances. -1 means 'all CPUs' (default).
 
+      n_samples: int, optional, default: 5000
+          How many samples to use when computing importance.
+
       progressbar: bool, optional, default: True
           Whether to display progress. This affects which function we use to multipool the function execution, where including the progress bar results in 10-20% slowdowns.
 
       drop_cols: list of str, optional
-          Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
+          Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.
 
-.. py:method:: OrderedOVRClassifier.plot_partial_dependence(self, X, col, grid_resolution=100, grid_range=(.05, 0.95), n_jobs=-1, progressbar=True, drop_cols=None)
+.. py:method:: OrderedOVRClassifier.plot_partial_dependence(self, X, col, grid_resolution=100, grid_range=(.05, 0.95), n_jobs=-1, n_samples=1000, progressbar=True, drop_cols=None)
 
   **Description**
 
@@ -250,11 +255,14 @@ Plotting API
       n_jobs: int, optional, default: -1
           The number of CPUs to use to compute the partial dependence. -1 means 'all CPUs' (default).
 
+      n_samples: int, optional, default: 1000
+          How many samples to use when computing partial dependence.
+
       progressbar: bool, optional, default: True
           Whether to display progress. This affects which function we use to multipool the function execution, where including the progress bar results in 10-20% slowdowns.
 
       drop_cols: list of str, optional
-          Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
+          Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.
 
 .. py:method:: OrderedOVRClassifier.plot_oovr_dependencies(self, ovr_val, X, y=None, comp_vals=None, drop_cols=None)
 
@@ -277,7 +285,7 @@ Plotting API
           List of classes to compare against the trained classifier for ovr_val. If None, all other classes will be compared against the ovr_val class.
 
       drop_cols: list of str, optional
-          Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
+          Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.
 
 Model Selection API
 -------------------
@@ -286,7 +294,7 @@ Model Selection API
 
   **Description**
 
-    Function for training a final model against a (possibly) classification masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates classification with the imported extended_classification_report function.
+    Function for training a final model against a (possibly) classification-masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates classification with the imported extended_classification_report function.
 
     Note that if an OVR model has been attached to the pipeline, the same dataset(s) used to train/evaluate the first OVR model must be used to train future OrderedOVRClassifier pipeline steps.
 
@@ -316,7 +324,7 @@ Model Selection API
 
   **Description**
 
-    Function for training an OVR model against a (possibly) classification masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates binary classification with the imported plot_thresholds function, which plots precision, recall, and fscores for all thresholds with 0.01 interval spacing.
+    Function for training an OVR model against a (possibly) classification-masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates binary classification with the imported plot_thresholds function, which plots precision, recall, and fscores for all thresholds with 0.01 interval spacing.
 
     Note that if an OVR model has been attached to the pipeline, the same dataset(s) used to train/evaluate the first OVR model must be used to train future OrderedOVRClassifier pipeline steps.
 
@@ -396,6 +404,25 @@ Model Selection API
 Miscellaneous API
 -----------------
 
+.. py:method:: OrderedOVRClassifier.multiclassification_report(self, X, y=None, drop_cols=None)
+
+  **Description**
+
+    .. _sklearn.metrics.classification_report: http://scikit-learn.org/stable/modules/generated/sklearn.metrics.classification_report.html
+
+    Wrapper function for extended_classification_report, which is an extension of sklearn.metrics.classification_report_. Builds a text report showing the main classification metrics and the total count of multiclass predictions per class.
+
+  **Parameters**
+
+      X: array-like, shape = [n_samples, n_features]
+          Data used for predictions.
+
+      y: array-like, shape = [n_samples, ], optional
+          True labels for X. If not provided and X is a DataFrame, will extract y column from X with the provided self.target value.
+
+      drop_cols: list of str, optional
+          Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.
+
 .. py:method:: OrderedOVRClassifier.predict_json(self, row)
 
   **Description**
@@ -458,7 +485,7 @@ Miscellaneous API
           Sample weights.
 
       drop_cols: list of str, optional
-          Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
+          Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.
 
   **Returns**
 

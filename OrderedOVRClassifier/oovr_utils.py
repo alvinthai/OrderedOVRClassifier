@@ -17,6 +17,12 @@ try:
 except ImportError:
     skater_loaded = False
 
+try:
+    from tqdm import tqdm
+    tqdm_loaded = True
+except ImportError:
+    tqdm_loaded = False
+
 
 class OOVR_Model(object):
     '''
@@ -157,7 +163,7 @@ def extended_classification_report(y_true, y_pred):
 
 def plot_2d_partial_dependence(oovr, X, col, col_names=None,
                                grid_resolution=100, grid_range=(.05, 0.95),
-                               n_jobs=-1, progressbar=True):
+                               n_jobs=-1, n_samples=1000, progressbar=True):
     '''
     Wrapper function for calling the plot_partial_dependence function from
     skater, which estimates the partial dependence of a column based on a
@@ -200,6 +206,9 @@ def plot_2d_partial_dependence(oovr, X, col, col_names=None,
         The number of CPUs to use to compute the partial dependence. -1 means
         'all CPUs' (default).
 
+    n_samples: int, optional, default: 1000
+        How many samples to use when computing partial dependence.
+
     progressbar: bool, optional, default: True
         Whether to display progress. This affects which function we use to
         multipool the function execution, where including the progress bar
@@ -221,7 +230,8 @@ def plot_2d_partial_dependence(oovr, X, col, col_names=None,
 
     fig = pdep.plot_partial_dependence([col], pyint_model, with_variance=False,
                                        grid_resolution=grid_resolution,
-                                       grid_range=grid_range, n_jobs=n_jobs,
+                                       grid_range=grid_range,
+                                       n_jobs=n_jobs, n_samples=n_samples,
                                        progressbar=progressbar)
 
     for i, f in enumerate(fig[0]):
@@ -233,7 +243,7 @@ def plot_2d_partial_dependence(oovr, X, col, col_names=None,
 
 
 def plot_feature_importance(oovr, X, y, col_names=None, filter_class=None,
-                            n_jobs=-1, progressbar=True):
+                            n_jobs=-1, n_samples=5000, progressbar=True):
     '''
     Wrapper function for calling the plot_feature_importance function from
     skater, which estimates the feature importance of all columns based on a
@@ -271,6 +281,9 @@ def plot_feature_importance(oovr, X, y, col_names=None, filter_class=None,
         The number of CPUs to use to compute the feature importances. -1 means
         'all CPUs' (default).
 
+    n_samples: int, optional, default: 5000
+        How many samples to use when computing importance.
+
     progressbar: bool, optional, default: True
         Whether to display progress. This affects which function we use to
         multipool the function execution, where including the progress bar
@@ -296,9 +309,11 @@ def plot_feature_importance(oovr, X, y, col_names=None, filter_class=None,
     pyint_model = InMemoryModel(oovr.predict_proba, target_names=target_names,
                                 examples=X)
 
-    fig, ax = feat.plot_feature_importance(pyint_model, n_jobs=n_jobs,
-                                           progressbar=progressbar,
-                                           filter_classes=filter_class)
+    fig, ax = feat.plot_feature_importance(pyint_model,
+                                           filter_classes=filter_class,
+                                           n_jobs=n_jobs,
+                                           n_samples=n_samples,
+                                           progressbar=progressbar)
     fig.set_size_inches(18.5, max(ax.get_ylim()[1] / 4, 10.5))
     ax.set_title(title)
 
@@ -382,21 +397,32 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
     pred_partial = pred_partial.reshape(-1, 100).T
 
     # ============================================================
-    def accuracy_compute(y_pred):
+    def accuracy_compute(y_pred, pbar=None):
         # note y and mask are variables not local to myfunc
         accs = m.accuracy_score(y[~mask], y_pred[~mask])
+        if pbar is not None:
+            pbar.update()
         return accs
 
-    def classification_compute(y_pred):
+    def classification_compute(y_pred, pbar=None):
         # note y and mask are variables not local to myfunc
         prf = m.precision_recall_fscore_support(y[~mask], y_pred[~mask],
+                                                warn_for=(),
                                                 pos_label=None)[0:3]
         prf = np.ravel(np.vstack(prf)[:, cols_slice].T)
+        if pbar is not None:
+            pbar.update()
         return prf
     # ============================================================
 
     # Calculate accuracy scores across thresholds
-    accs = np.apply_along_axis(accuracy_compute, 1, pred_partial)
+    if tqdm_loaded:
+        pbar1 = tqdm(total=100, desc='Calculating accuracy')
+        accs = np.apply_along_axis(accuracy_compute, 1, pred_partial,
+                                   pbar=pbar1)
+        pbar1.close()
+    else:
+        accs = np.apply_along_axis(accuracy_compute, 1, pred_partial)
 
     # Plot accuracy as a function of threshold for OVR classifier
     pd.DataFrame(accs, index=np.arange(0, 1.00, 0.01),
@@ -412,7 +438,14 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
     plt.show(block=False)
 
     # Calculate precison, recall, f1 scores across thresholds
-    prf = np.apply_along_axis(classification_compute, 1, pred_partial)
+    if tqdm_loaded:
+        pbar2 = tqdm(total=100, desc='Calculating precision, recall, and f1')
+        prf = np.apply_along_axis(classification_compute, 1, pred_partial,
+                                  pbar=pbar2)
+        pbar2.close()
+    else:
+        prf = np.apply_along_axis(classification_compute, 1, pred_partial)
+
     cols = [['precision_' + str(l), 'recall_' + str(l), 'f1_' + str(l)]
             for l in oovr._le.inverse_transform(cols_slice)]
     cols = np.ravel(cols)

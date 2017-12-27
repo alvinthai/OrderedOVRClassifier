@@ -692,7 +692,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Data used for predictions.
 
         drop_cols: list of str, optional
-            Labels of columns to ignore in modeling, only applicable to pandas
+            Labels of columns ignored in modeling, only applicable to pandas
             DataFrame X input.
 
         Returns
@@ -761,7 +761,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         else:
             col_names = None
 
-        no_multipooling = ['lightgbm.sklearn', 'sklearn.linear_model.logistic']
+        no_multipooling = ['lightgbm.sklearn', 'xgboost.sklearn',
+                           'sklearn.linear_model.logistic']
 
         for _, clf in self.pipeline:
             if clf.__module__ in no_multipooling:
@@ -770,7 +771,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return X, n_jobs, col_names
 
-    def _xg_cleanup(self, clf):
+    @staticmethod
+    def _xg_cleanup(clf):
         '''
         Utility function to delete the Booster.feature_names attributes in
         XGBClassifier. Deleting this attribute allows XGBClassifier to make
@@ -1152,8 +1154,34 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return model
 
+    def multiclassification_report(self, X, y=None, drop_cols=None):
+        '''
+        Wrapper function for extended_classification_report, which is an
+        extension of sklearn.metrics.classification_report. Builds a text
+        report showing the main classification metrics and the total count of
+        multiclass predictions per class.
+
+        Parameters
+        ----------
+        X: array-like, shape = [n_samples, n_features]
+            Data used for predictions.
+
+        y: array-like, shape = [n_samples, ], optional
+            True labels for X. If not provided and X is a DataFrame, will
+            extract y column from X with the provided self.target value.
+
+        drop_cols: list of str, optional
+            Labels of columns ignored in modeling, only applicable to pandas
+            DataFrame X input.
+        '''
+        X, y, _ = self._xy_transform(X, y, drop_cols)
+        y_pred = self.predict(X)
+
+        return u.extended_classification_report(y, y_pred)
+
     def plot_feature_importance(self, X, y=None, filter_class=None, n_jobs=-1,
-                                progressbar=True, drop_cols=None):
+                                n_samples=5000, progressbar=True,
+                                drop_cols=None):
         '''
         Wrapper function for calling the plot_feature_importance function from
         skater, which estimates the feature importance of all columns based on
@@ -1186,20 +1214,23 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             The number of CPUs to use to compute the feature importances. -1
             means 'all CPUs' (default).
 
+        n_samples: int, optional, default: 5000
+            How many samples to use when computing importance.
+
         progressbar: bool, optional, default: True
             Whether to display progress. This affects which function we use to
             multipool the function execution, where including the progress bar
             results in 10-20% slowdowns.
 
         drop_cols: list of str, optional
-            Labels of columns to ignore in modeling, only applicable to pandas
+            Labels of columns ignored in modeling, only applicable to pandas
             DataFrame X input.
         '''
         X, y, _ = self._xy_transform(X, y, drop_cols)
         X, n_jobs, col_names = self._skater_extract(X, n_jobs)
 
         return u.plot_feature_importance(self, X, y, col_names, filter_class,
-                                         n_jobs, progressbar)
+                                         n_jobs, n_samples, progressbar)
 
     def plot_oovr_dependencies(self, ovr_val, X, y=None, comp_vals=None,
                                drop_cols=None):
@@ -1226,7 +1257,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             ovr_val class.
 
         drop_cols: list of str, optional
-            Labels of columns to ignore in modeling, only applicable to pandas
+            Labels of columns ignored in modeling, only applicable to pandas
             DataFrame X input.
         '''
         X, y, _ = self._xy_transform(X, y, drop_cols)
@@ -1234,7 +1265,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
     def plot_partial_dependence(self, X, col, grid_resolution=100,
                                 grid_range=(.05, 0.95), n_jobs=-1,
-                                progressbar=True, drop_cols=None):
+                                n_samples=1000, progressbar=True,
+                                drop_cols=None):
         '''
         Wrapper function for calling the plot_partial_dependence function from
         skater, which estimates the partial dependence of a column based on a
@@ -1271,13 +1303,16 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             The number of CPUs to use to compute the partial dependence. -1
             means 'all CPUs' (default).
 
+        n_samples: int, optional, default: 1000
+            How many samples to use when computing partial dependence.
+
         progressbar: bool, optional, default: True
             Whether to display progress. This affects which function we use to
             multipool the function execution, where including the progress bar
             results in 10-20% slowdowns.
 
         drop_cols: list of str, optional
-            Labels of columns to ignore in modeling, only applicable to pandas
+            Labels of columns ignored in modeling, only applicable to pandas
             DataFrame X input.
         '''
         X = self._pred_cleanup(X, drop_cols)
@@ -1285,7 +1320,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return u.plot_2d_partial_dependence(self, X, col, col_names,
                                             grid_resolution, grid_range,
-                                            n_jobs, progressbar)
+                                            n_jobs, n_samples, progressbar)
 
     def predict(self, X, start=0, drop_cols=None):
         '''
@@ -1304,7 +1339,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             prediction through full pipeline).
 
         drop_cols: list of str, optional
-            Labels of columns to ignore in modeling, only applicable to pandas
+            Labels of columns ignored in modeling, only applicable to pandas
             DataFrame X input.
 
         Returns
@@ -1358,7 +1393,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Predicted multi-class target for input row data.
         '''
         row = self._json_transform(row)
-        pred = self.predict2(row)[0]
+        pred = self.predict(row)[0]
         return pred
 
     def predict_proba(self, X, score_type='uniform', drop_cols=None):
@@ -1397,7 +1432,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Acceptable inputs are 'raw', 'chained', and 'uniform'.
 
         drop_cols: list of str, optional
-            Labels of columns to ignore in modeling, only applicable to pandas
+            Labels of columns ignored in modeling, only applicable to pandas
             DataFrame X input.
 
         Returns
@@ -1548,7 +1583,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Sample weights.
 
         drop_cols: list of str, optional
-            Labels of columns to ignore in modeling, only applicable to pandas
+            Labels of columns ignored in modeling, only applicable to pandas
             DataFrame X input.
 
         Returns
