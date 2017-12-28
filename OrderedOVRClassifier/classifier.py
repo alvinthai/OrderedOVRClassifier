@@ -1193,8 +1193,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         3. Replace the entire column corresponding to the variable of interest
            with replacement values randomly sampled from the column of interest
         4. Use the model to predict the probabilities.
-        5. The (column, average_probability_difference) becomes an (x, y) pair
-           of the feature importance plot.
+        5. The (column, average_absolute_probability_difference) becomes an
+           (x, y) pair of the feature importance plot.
         6. Normalize the average_probability_difference so the sum equals 1.
 
         Parameters
