@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>API Reference &mdash; OrderedOVRClassifier 1.0.0 documentation</title>
+  <title>API Reference &mdash; OrderedOVRClassifier 1.1.0 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="OrderedOVRClassifier 1.0.0 documentation" href="index.html"/>
+    <link rel="top" title="OrderedOVRClassifier 1.1.0 documentation" href="index.html"/>
         <link rel="prev" title="Welcome to OrderedOVRClassifier’s documentation!" href="index.html"/>
     <link href="_static/my_theme.css" rel="stylesheet" type="text/css">
 
@@ -67,7 +67,7 @@
             
             
               <div class="version">
-                1.0
+                1.1
               </div>
             
           
@@ -168,7 +168,7 @@
 <p><a class="reference external" href="https://github.com/alvinthai/OrderedOVRClassifier/blob/master/OrderedOVRClassifier/classifier.py">[View source on GitHub]</a></p>
 <dl class="class">
 <dt id="OrderedOVRClassifier">
-<em class="property">class </em><code class="descname">OrderedOVRClassifier</code><span class="sig-paren">(</span><em>target=None</em>, <em>ovr_vals=None</em>, <em>model_dict=None</em>, <em>model_fit_params=None</em>, <em>fbeta_weight=1.0</em>, <em>train_final_model=True</em>, <em>train_final_only=False</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descname">OrderedOVRClassifier</code><span class="sig-paren">(</span><em>target=None</em>, <em>ovr_vals=None</em>, <em>model_dict=None</em>, <em>model_fit_params=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>OrderedOVRClassifier is a custom scikit-learn module for approaching multi-classification with an Ordered One-Vs-Rest Modeling approach. Ordered One-Vs-Rest Classification performs a series of One-Vs-Rest Classifications where negative results are moved into subsequent training with previous classifications filtered out.</p>
@@ -199,18 +199,10 @@
 </dd>
 <dt>model_fit_params: dict of dict</dt>
 <dd><p class="first">Additional parameters (inputted as a dict) to pass to the fit step of the models specified in model_dict.</p>
-<div class="last highlight-python"><div class="highlight"><pre><span></span><span class="n">model_fit_params</span> <span class="o">=</span> <span class="p">{</span> <span class="n">value1</span> <span class="p">:</span> <span class="p">{</span><span class="s1">&#39;sample_weight&#39;</span><span class="p">:</span> <span class="bp">None</span><span class="p">},</span>
-                     <span class="n">value2</span> <span class="p">:</span> <span class="p">{</span><span class="s1">&#39;sample_weight&#39;</span><span class="p">:</span> <span class="bp">None</span><span class="p">},</span>
-                    <span class="s1">&#39;final&#39;</span> <span class="p">:</span> <span class="p">{</span><span class="s1">&#39;verbose&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">}}</span>
+<div class="last highlight-python"><div class="highlight"><pre><span></span><span class="n">model_fit_params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;final&#39;</span> <span class="p">:</span> <span class="p">{</span><span class="s1">&#39;verbose&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">}</span> <span class="p">}</span>
 </pre></div>
 </div>
 </dd>
-<dt>fbeta_weight: float, default: 1.0</dt>
-<dd>The strength of recall versus precision in the F-score.</dd>
-<dt>train_final_model: bool, default: True</dt>
-<dd>Whether to train a final model to the remaining data after OVR fits.</dd>
-<dt>train_final_only: bool, default: False</dt>
-<dd>Whether to ignore OVR modeling and to train the final model only.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Methods</strong></p>
@@ -222,7 +214,7 @@
 <tbody valign="top">
 <tr class="row-odd"><td><strong>Core API</strong></td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit" title="OrderedOVRClassifier.fit"><code class="xref py py-class docutils literal"><span class="pre">fit</span></code></a> (X[, y, eval_Set, drop_cols])</td>
+<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit" title="OrderedOVRClassifier.fit"><code class="xref py py-class docutils literal"><span class="pre">fit</span></code></a> (X[, y, eval_set, drop_cols, fbeta_weight, train_final_model, train_final_only, model_fit_params])</td>
 </tr>
 <tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.predict" title="OrderedOVRClassifier.predict"><code class="xref py py-class docutils literal"><span class="pre">predict</span></code></a> (X[, start, drop_cols])</td>
 </tr>
@@ -238,11 +230,11 @@
 </tr>
 <tr class="row-odd"><td><strong>Model Selection API</strong></td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test" title="OrderedOVRClassifier.fit_test"><code class="xref py py-class docutils literal"><span class="pre">fit_test</span></code></a> (model, X[, y, eval_set, drop_cols])</td>
+<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test" title="OrderedOVRClassifier.fit_test"><code class="xref py py-class docutils literal"><span class="pre">fit_test</span></code></a> (model, X[, y, eval_set, drop_cols, fit_params])</td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test_ovr" title="OrderedOVRClassifier.fit_test_ovr"><code class="xref py py-class docutils literal"><span class="pre">fit_test_ovr</span></code></a> (model, ovr_val, X[, y, eval_set, drop_cols])</td>
+<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test_ovr" title="OrderedOVRClassifier.fit_test_ovr"><code class="xref py py-class docutils literal"><span class="pre">fit_test_ovr</span></code></a> (model, ovr_val, X[, y, eval_set, drop_cols, fbeta_weight, fit_params])</td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test_grid" title="OrderedOVRClassifier.fit_test_grid"><code class="xref py py-class docutils literal"><span class="pre">fit_test_grid</span></code></a> (grid_model, X[, y, eval_set, ovr_val, drop_cols])</td>
+<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test_grid" title="OrderedOVRClassifier.fit_test_grid"><code class="xref py py-class docutils literal"><span class="pre">fit_test_grid</span></code></a> (grid_model, X[, y, eval_set, ovr_val, drop_cols, fit_params])</td>
 </tr>
 <tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.attach_model" title="OrderedOVRClassifier.attach_model"><code class="xref py py-class docutils literal"><span class="pre">attach_model</span></code></a> (oovr_model)</td>
 </tr>
@@ -265,12 +257,12 @@
 <h2>Core API<a class="headerlink" href="#core-api" title="Permalink to this headline">¶</a></h2>
 <dl class="method">
 <dt id="OrderedOVRClassifier.fit">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em>, <em>fbeta_weight=1.0</em>, <em>train_final_model=True</em>, <em>train_final_only=False</em>, <em>model_fit_params=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>Fits <code class="docutils literal"><span class="pre">OrderedOVRClassifier</span></code> and attaches trained models to the class pipeline.</p>
-<p>If self.train_final_only=True (not default), fit skips the Ordered OVR training and trains/evaluates the model using the API for OrderedOVRClassifier on all classes.</p>
-<p>If self.train_final_model=True (default), fit does training on remaining classes not specified in self.ovr_vals.</p>
+<p>If train_final_only=True (not default), fit skips the Ordered OVR training and trains/evaluates the model using the API for OrderedOVRClassifier on all classes.</p>
+<p>If train_final_model=True (default), fit does training on remaining classes not specified in self.ovr_vals.</p>
 <p>Binary models are evaluated with the imported plot_thresholds function, which evaluates precision, recall, and fscores for all thresholds with 0.01 interval spacing and automatically sets the threshold at the best weighted fscore. Multiclass models are evaluated using the imported extended_classification_report function.</p>
 </div></blockquote>
 <p><strong>Parameters</strong></p>
@@ -284,6 +276,18 @@
 <dd>Dataset to use as validation set for early-stopping and/or scoring trained models.</dd>
 <dt>drop_cols: list of str, optional</dt>
 <dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dt>fbeta_weight: float, optional, default: 1.0</dt>
+<dd>The strength of recall versus precision in the F-score.</dd>
+<dt>train_final_model: bool, optional, default: True</dt>
+<dd>Whether to train a final model to the remaining data after OVR fits.</dd>
+<dt>train_final_only: bool, optional, default: False</dt>
+<dd>Whether to ignore OVR modeling and to train the final model only.</dd>
+<dt>model_fit_params: dict of dict, optional</dt>
+<dd><p class="first">Additional parameters (inputted as a dict) to pass to the fit step of the models specified in self.model_dict.</p>
+<div class="last highlight-python"><div class="highlight"><pre><span></span><span class="n">model_fit_params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;final&#39;</span> <span class="p">:</span> <span class="p">{</span><span class="s1">&#39;verbose&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">}</span> <span class="p">}</span>
+</pre></div>
+</div>
+</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
@@ -451,7 +455,7 @@
 <h2>Model Selection API<a class="headerlink" href="#model-selection-api" title="Permalink to this headline">¶</a></h2>
 <dl class="method">
 <dt id="OrderedOVRClassifier.fit_test">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test</code><span class="sig-paren">(</span><em>self</em>, <em>model</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test</code><span class="sig-paren">(</span><em>self</em>, <em>model</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em>, <em>fit_params=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>Function for training a final model against a (possibly) classification-masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates classification with the imported extended_classification_report function.</p>
@@ -470,6 +474,8 @@
 <dd>Dataset to use as validation set for early-stopping and/or scoring trained models.</dd>
 <dt>drop_cols: list of str, optional</dt>
 <dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dt>fit_params: dict, optional</dt>
+<dd>Key-value pairs of optional arguments to pass into model fit function.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
@@ -483,7 +489,7 @@
 
 <dl class="method">
 <dt id="OrderedOVRClassifier.fit_test_ovr">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test_ovr</code><span class="sig-paren">(</span><em>self</em>, <em>model</em>, <em>ovr_val</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test_ovr" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test_ovr</code><span class="sig-paren">(</span><em>self</em>, <em>model</em>, <em>ovr_val</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em>, <em>fbeta_weight=1.0</em>, <em>fit_params=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test_ovr" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>Function for training an OVR model against a (possibly) classification-masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates binary classification with the imported plot_thresholds function, which plots precision, recall, and fscores for all thresholds with 0.01 interval spacing.</p>
@@ -504,6 +510,10 @@
 <dd>Dataset to use as validation set for early-stopping and/or scoring trained models.</dd>
 <dt>drop_cols: list of str, optional</dt>
 <dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dt>fbeta_weight: float, optional, default: 1.0</dt>
+<dd>The strength of recall versus precision in the F-score.</dd>
+<dt>fit_params: dict, optional</dt>
+<dd>Key-value pairs of optional arguments to pass into model fit function.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
@@ -517,7 +527,7 @@
 
 <dl class="method">
 <dt id="OrderedOVRClassifier.fit_test_grid">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test_grid</code><span class="sig-paren">(</span><em>self</em>, <em>grid_model</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>ovr_val=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test_grid" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test_grid</code><span class="sig-paren">(</span><em>self</em>, <em>grid_model</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>ovr_val=None</em>, <em>drop_cols=None</em>, <em>fit_params=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test_grid" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>Wrapper for testing hyper-parameter optimization models with the OrderedOVRClassifier API against a (possibly) classification-masked X dataset.</p>
@@ -538,6 +548,8 @@
 <dd>If specified, fit_test_grid will perform OVR modeling against the ovr_val classification label.</dd>
 <dt>drop_cols: list of str, optional</dt>
 <dd>Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.</dd>
+<dt>fit_params: dict, optional</dt>
+<dd>Key-value pairs of optional arguments to pass into model fit function.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
@@ -714,7 +726,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'1.0.0',
+            VERSION:'1.1.0',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
