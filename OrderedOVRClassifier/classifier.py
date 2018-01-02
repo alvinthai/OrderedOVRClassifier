@@ -5,6 +5,7 @@ OrderedOVRClassifier
 # Author: Alvin Thai <alvinthai@gmail.com>
 
 from __future__ import division, print_function
+from itertools import repeat
 import copy
 import datetime
 import json
@@ -82,8 +83,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
     model_dict: dict of models
         Dictionary of models to perform ordered one-vs-rest, dict should
-        include a model for each value in ovr_vals, and if
-        train_final_model=True, a model specified for 'final'.
+        include a model for each value in ovr_vals, and a model specified for
+        the last classifier named 'final'.
 
         i.e. model_dict = { value1: LogisticRegression(),
                             value2: RandomForestClassifier(),
@@ -91,20 +92,9 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
     model_fit_params: dict of dict
         Additional parameters (inputted as a dict) to pass to the fit step of
-        the models specified in model_dict.
+        the models specified in self.model_dict.
 
-        i.e. model_fit_params = { value1: {'sample_weight': None},
-                                  value2: {'sample_weight': None},
-                                 'final': {'verbose': False} }
-
-    fbeta_weight: float, default: 1.0
-        The strength of recall versus precision in the F-score.
-
-    train_final_model: bool, default: True
-        Whether to train a final model to the remaining data after OVR fits.
-
-    train_final_only: bool, default: False
-        Whether to ignore OVR modeling and to train the final model only.
+        i.e. model_fit_params = {'final': {'verbose': False} }
 
     Attributes
     ----------
@@ -129,28 +119,17 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         in the OrderedOVRClassifier pipeline.
     '''
     def __init__(self, target=None, ovr_vals=None, model_dict=None,
-                 model_fit_params=None, fbeta_weight=1.0,
-                 train_final_model=True, train_final_only=False):
+                 model_fit_params=None):
         self.target = target
         self.ovr_vals = ovr_vals
         self.model_dict = model_dict
         self.model_fit_params = model_fit_params
-        self.fbeta_weight = fbeta_weight
-        self.train_final_model = train_final_model
-        self.train_final_only = train_final_only
 
-        self._le = LabelEncoder()
-        self._all_binary = False
-        self._eval_mask = None
-        self._mask = None
-        self.input_cols = None
-        self.pipeline = []
-        self.rest_precision = []
-        self.thresholds = []
+        self._default_attributes()
+        self._init_setup_defaults()
 
         self._logger = logging.Logger('')
         self._logger.addHandler(logging.StreamHandler())
-        self._init_setup_defaults()
 
     def __updateattr__(self, attributes):
         '''
@@ -209,6 +188,19 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return self.ovr_vals
 
+    def _default_attributes(self):
+        '''
+        Sets/resets defualt attributes for OrderedOVRClassifier.
+        '''
+        self._le = LabelEncoder()
+        self._all_binary = False
+        self._eval_mask = None
+        self._mask = None
+        self.input_cols = None
+        self.pipeline = []
+        self.rest_precision = []
+        self.thresholds = []
+
     def _encode_y(self, y, eval_y=None, lgbm_grid=False):
         '''
         Encodes y values with LabelEncoder to allow classification on string
@@ -222,7 +214,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         eval_y: array-like, shape = [n_samples, ], optional
             y values from the evaluation set to encode.
 
-        lgmb_grid: boolean, default: False
+        lgmb_grid: boolean, optional, default: False
             For grid search, LGBM requires input to be between [0, n_class),
             which may not be the case for OrderedOVRClassifier when classes
             are masked out. Setting this value to true ensures that a new
@@ -255,9 +247,9 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
     def _eval_set(self, eval_set, drop_cols):
         '''
         Cleans up eval_set into proper format for xgboost and lightgbm. If
-        eval_set is a DataFrame, unpacks it into (X, y) tuple. Aside from
-        xgboost/lightgbm, eval_set is also used to evaluate trained models on
-        unseen data and validate grid searches.
+        eval_set is a DataFrame, unpacks it into a list containing an (X, y)
+        tuple. Aside from xgboost/lightgbm, eval_set is also used to evaluate
+        trained models on unseen data and validate grid searches.
 
         Parameters
         ----------
@@ -302,7 +294,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return eval_set
 
-    def _fit_final_model(self, X, y, eval_set, attach, model=None):
+    def _fit_final_model(self, X, y, eval_set, attach, model=None,
+                         train_final_only=False, fit_params=None):
         '''
         Utility function for fitting final model or testing a model against a
         classification-masked X dataset.
@@ -326,6 +319,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         model: model, optional
             A model to test against X dataset with masked classifications.
 
+        train_final_only: bool, optional, default: False
+            Whether OVR modeling was ignored.
+
+        fit_params: dict, optional
+            Key-value pairs of optional arguments to pass into model fit
+            function.
+
         Returns
         -------
         clf: model
@@ -333,7 +333,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         '''
         Xm, ym, eval_X, eval_y = self._mask_datasets(X, y, eval_set)
         ym, eval_y, enc = self._encode_y(ym, eval_y)
-        clf, fit_params = self._get_model('final', eval_X, eval_y, model)
+        clf, fit_params = self._get_model('final', eval_X, eval_y, model,
+                                          fit_params)
 
         clf = self._fit_model(clf, Xm, ym, 'final', fit_params)
 
@@ -347,14 +348,14 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         y_true = enc.inverse_transform(y_true)
         y_pred = enc.inverse_transform(y_pred)
 
-        if not self.train_final_only:
+        if not train_final_only:
             print('', '-'*80, sep='\n')
             u.extended_classification_report(y_true, y_pred)
 
         if attach:
             self.pipeline.append(('final', clf))
 
-            if not self.train_final_only:
+            if not train_final_only:
                 prt = 'finished fit for remaining classes'
                 print('-'*80, prt, '-'*80, '', sep='\n')
         else:
@@ -411,7 +412,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         return clf
 
     def _fit_ovr(self, X, y, eval_set, ovr_vals, fbeta_weight, enc, attach,
-                 model=None):
+                 model=None, fit_params=None):
         '''
         Utility function for fitting or testing a model in a OVR fashion
         against a (possibly) classification-masked X-dataset.
@@ -446,6 +447,10 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         model: model, optional
             A model to test against X dataset with masked classifications.
 
+        fit_params: dict, optional
+            Key-value pairs of optional arguments to pass into model fit
+            function.
+
         Returns
         -------
         clf: OOVR_Model or None
@@ -460,10 +465,18 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             self._eval_mask = np.zeros(len(eval_set[0][1])).astype(bool)
 
         for ovr_val in ovr_vals:
+            if attach and fit_params is not None:
+                # attach == True when fit (and not fit_test_ovr) is called
+                # if specified, fit_params is expected to be dict of dict
+                fit_ovr_params = fit_params.get(ovr_val, None)
+            else:
+                fit_ovr_params = fit_params
+
             Xm, ym, eval_X, eval_y = self._mask_datasets(X, y, eval_set,
                                                          ovr_val)
-            clf, fit_params = self._get_model(ovr_val, eval_X, eval_y, model)
-            clf = self._fit_model(clf, Xm, ym, ovr_val, fit_params)
+            clf, fit_ovr_params = self._get_model(ovr_val, eval_X, eval_y,
+                                                  model, fit_ovr_params)
+            clf = self._fit_model(clf, Xm, ym, ovr_val, fit_ovr_params)
             title = str(ovr_val).title()
 
             # Use best weighted fscore as threshold and set mask for future
@@ -507,7 +520,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return
 
-    def _get_model(self, key, eval_X, eval_y, model=None):
+    def _get_model(self, key, eval_X, eval_y, model=None, fit_params=None,
+                   prefix=None):
         '''
         Retrieve model and fit_params from model_dict and model_fit_params
         attributes. Also adds eval_set to the fit_params for xgboost and
@@ -529,6 +543,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             specified, does not retrieve model from model_dict with supplied
             key.
 
+        fit_params: dict, optional
+            Key-value pairs of optional arguments to pass into model fit
+            function.
+
+        prefix: str, optional
+            String prefix for parameter keys.
+
         Returns
         -------
         clf: model
@@ -547,10 +568,24 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         else:
             clf = copy.deepcopy(self.model_dict.get(key, default_m))
 
-        fit_params = copy.deepcopy(self.model_fit_params.get(key, default_p))
+        base_params = copy.deepcopy(self.model_fit_params.get(key, default_p))
+
+        # prefix keys when model is a grid serach with pipeline estimator
+        if type(prefix) == str:
+            for key in base_params:
+                base_params[prefix + key] = base_params.pop(key)
+
+        if type(fit_params) == dict:
+            base_params.update(fit_params)
+        elif fit_params is not None:
+            msg = 'fit_params not a dictionary. ignoring fit_params...'
+            self._logger.warn(msg)
 
         if eval_X is not None:
-            fit_params = u.check_eval_metric(clf, fit_params, eval_X, eval_y)
+            fit_params = u.check_eval_metric(clf, base_params, eval_X, eval_y,
+                                             prefix=prefix)
+        else:
+            fit_params = base_params
 
         return clf, fit_params
 
@@ -882,14 +917,19 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return self
 
-    def fit(self, X, y=None, eval_set=None, drop_cols=None):
+    def fit(self, X, y=None, eval_set=None, drop_cols=None, fbeta_weight=1.0,
+            train_final_model=True, train_final_only=False,
+            model_fit_params=None):
         '''
         Fits OrderedOVRClassifier and attaches trained models to the class
-        pipeline. If self.train_final_only == True (not default), fit skips
-        the Ordered OVR training and trains/evaluates the model using the API
-        for OrderedOVRClassifier on all classes. If self.train_final_model ==
-        True (default), fit does training on remaining classes not specified in
-        self.ovr_vals.
+        pipeline.
+
+        If train_final_only=True (not default), fit skips the Ordered OVR
+        training and trains/evaluates the model using the API for
+        OrderedOVRClassifier on all classes.
+
+        If train_final_model=True (default), fit does training on remaining
+        classes not specified in self.ovr_vals.
 
         Binary models are evaluated with the imported plot_thresholds function,
         which evaluates precision, recall, and fscores for all thresholds
@@ -914,17 +954,33 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
 
+        fbeta_weight: float, optional, default: 1.0
+            The strength of recall versus precision in the F-score.
+
+        train_final_model: bool, optional, default: True
+            Whether to train a final model to the remaining data after OVR fits
+
+        train_final_only: bool, optional, default: False
+            Whether to ignore OVR modeling and to train the final model only.
+
+        model_fit_params: dict of dict, optional
+            Additional parameters (inputted as a dict) to pass to the fit step
+            of the models specified in self.model_dict.
+
+            i.e. model_fit_params = {'final': {'verbose': False} }
+
         Returns
         -------
         self
         '''
         start = datetime.datetime.now()
+        self._default_attributes()
 
         X, y, drop_cols = self._xy_transform(X, y, drop_cols)
         eval_set = self._eval_set(eval_set, drop_cols)
         enc = self._le.fit(y)  # fit LabelEncoder
 
-        if not self.train_final_only:
+        if not train_final_only:
             if len(self.ovr_vals) == 0:
                 # If not specified, sets ovr_vals as the majority class in the
                 # target variable by default. In practice, this just ensures
@@ -934,15 +990,23 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
             # run _fit_ovr
             ovr_vals = self._check_ovr(y)
-            fbeta_weight = self.fbeta_weight
-            self._fit_ovr(X, y, eval_set, ovr_vals, fbeta_weight, enc, True)
+            self._fit_ovr(X, y, eval_set, ovr_vals, fbeta_weight, enc,
+                          attach=True, fit_params=model_fit_params)
         else:
             self.ovr_vals = []
 
-        if self.train_final_model or self.train_final_only:
+        if train_final_model or train_final_only:
             if not self._all_binary:
+                # if specified, model_fit_params is expected to be dict of dict
+                if model_fit_params is not None:
+                    fit_params = model_fit_params.get('final', None)
+                else:
+                    fit_params = None
+
                 # Fit the final model and attach to pipeline
-                self._fit_final_model(X, y, eval_set, True)
+                self._fit_final_model(X, y, eval_set, attach=True,
+                                      train_final_only=train_final_only,
+                                      fit_params=fit_params)
 
             if eval_set is not None:
                 y_true = eval_set[0][1]
@@ -962,7 +1026,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         return self
 
-    def fit_test(self, model, X, y=None, eval_set=None, drop_cols=None):
+    def fit_test(self, model, X, y=None, eval_set=None, drop_cols=None,
+                 fit_params=None):
         '''
         Function for training a final model against a (possibly) classification
         masked X dataset. Does not attach trained model to the pipeline for
@@ -995,6 +1060,10 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
 
+        fit_params: dict, optional
+            Key-value pairs of optional arguments to pass into model fit
+            function.
+
         Returns
         -------
         model: OOVR_Model
@@ -1007,12 +1076,12 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             enc = LabelEncoder().fit(y)
 
         model = self._fit_final_model(X, y, eval_set, attach=False,
-                                      model=model)
+                                      model=model, fit_params=fit_params)
 
         return model
 
     def fit_test_grid(self, grid_model, X, y=None, eval_set=None,
-                      ovr_val=None, drop_cols=None):
+                      ovr_val=None, drop_cols=None, fit_params=None):
         '''
         Wrapper for testing hyper-parameter optimization models with the
         OrderedOVRClassifier API against a (possibly) classification-masked X
@@ -1047,6 +1116,10 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
 
+        fit_params: dict, optional
+            Key-value pairs of optional arguments to pass into model fit
+            function.
+
         Returns
         -------
         grid_model: GridSearchCV or RandomizedSearchCV model
@@ -1055,31 +1128,65 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             need to train a new model with the best parameters found if they
             choose to attach the model to the OrderedOVRClassifier pipeline.
         '''
-        if grid_model.estimator.__module__ == 'lightgbm.sklearn':
+        mclass = str(grid_model.estimator.__class__).split("'")[-2].split('.')
+
+        # checks if grid_model is a Pipeline class
+        if mclass[-1][:8] == 'Pipeline':
+            grid_model.estimator = u.PipelineES(grid_model.estimator.steps,
+                                                grid_model.estimator.memory)
+            prefix = grid_model.estimator.steps[-1][0] + '__'
+            estimator = grid_model.estimator.steps[-1][1]
+        else:
+            prefix = None
+            estimator = grid_model.estimator
+
+        if estimator.__module__ == 'lightgbm.sklearn':
             lgbm_grid = True
         else:
             lgbm_grid = False
 
         X, y, drop_cols = self._xy_transform(X, y, drop_cols)
         eval_set = self._eval_set(eval_set, drop_cols)
+
+        if ovr_val is not None:
+            assert ovr_val in y.unique()
+            key = ovr_val
+        else:
+            key = 'final'
+
         Xm, ym, eval_X, eval_y = self._mask_datasets(X, y, eval_set, ovr_val)
 
         if lgbm_grid:
             ym, eval_y, _ = self._encode_y(ym, eval_y, lgbm_grid)
 
-        _, fit_params = self._get_model('final', eval_X, eval_y, grid_model)
+        _, fit_params = self._get_model(key, eval_X, eval_y, model=estimator,
+                                        fit_params=fit_params, prefix=prefix)
 
         if eval_X is not None:
-            if X.__class__ == pd.DataFrame:
-                X = Xm.append(eval_X)
-            elif X.__class__ == np.ndarray:
-                X = np.vstack([Xm, eval_X])
+            n = 1 + int(mclass[-1][:8] == 'Pipeline')
 
-            y = np.hstack([ym, eval_y])
-            cv = [(np.arange(len(ym)), np.arange(len(ym), len(y)))]
+            if X.__class__ == pd.DataFrame:
+                X = pd.concat([Xm] + list(repeat(eval_X, n)))
+            elif X.__class__ == np.ndarray:
+                X = np.vstack([Xm] + list(repeat(eval_X, n)))
+
+            y = np.hstack([ym] + list(repeat(eval_y, n)))
+
+            end_train = len(y) - len(eval_y)
+            end_test = len(y)
+            cv = [(np.arange(end_train), np.arange(end_train, end_test))]
+
+            if n == 2:
+                end_train = len(y) - 2*len(eval_y)
+                end_test = len(y) - len(eval_y)
+
+                eval_idx = [(np.arange(end_train),
+                             np.arange(end_train, end_test))]
+                fit_params['eval_idx'] = eval_idx
+
             grid_model.set_params(cv=cv, refit=False)
 
-        grid_model = self._fit_model(grid_model, X, y, 'final', fit_params)
+        grid_model = self._fit_model(grid_model, X, y, key, fit_params)
 
         prt = 'best_params:\n{}\n'.format(grid_model.best_params_)
         print('', '-'*80, prt, sep='\n')
@@ -1095,7 +1202,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         return grid_model
 
     def fit_test_ovr(self, model, ovr_val, X, y=None, eval_set=None,
-                     drop_cols=None):
+                     drop_cols=None, fbeta_weight=1.0, fit_params=None):
         '''
         Function for training an OVR model against a (possibly) classification
         masked X dataset. Does not attach trained model to the pipeline for
@@ -1132,6 +1239,13 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Labels of columns to ignore in modeling, only applicable to pandas
             DataFrame X input.
 
+        fbeta_weight: float, optional, default: 1.0
+            The strength of recall versus precision in the F-score.
+
+        fit_params: dict, optional
+            Key-value pairs of optional arguments to pass into model fit
+            function.
+
         Returns
         -------
         model: OOVR_Model
@@ -1139,7 +1253,6 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         '''
         X, y, drop_cols = self._xy_transform(X, y, drop_cols)
         eval_set = self._eval_set(eval_set, drop_cols)
-        fbeta_weight = self.fbeta_weight
 
         assert ovr_val in y.unique()
 
@@ -1150,7 +1263,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             enc = self._le.fit(y)
 
         model = self._fit_ovr(X, y, eval_set, [ovr_val], fbeta_weight, enc,
-                              attach=False, model=model)
+                              attach=False, model=model, fit_params=fit_params)
 
         return model
 

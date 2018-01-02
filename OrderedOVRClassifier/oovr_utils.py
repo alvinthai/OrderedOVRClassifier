@@ -1,6 +1,7 @@
 from __future__ import division, print_function
 from matplotlib.ticker import FormatStrFormatter
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.pipeline import Pipeline
 
 import logging
 import matplotlib.pyplot as plt
@@ -38,6 +39,61 @@ class OOVR_Model(object):
             self.__setattr__(k, v)
 
 
+class PipelineES(Pipeline):
+    '''
+    Modified Pipeline class that allows transformed dataset to be passed into
+    the 'eval_set' parameter when fitting LGBMClassifier or XGBClassifier.
+    '''
+    def fit(self, X, y=None, eval_idx=None, **fit_params):
+        """Fit the model
+
+        Fit all the transforms one after the other and transform the
+        data, then fit the transformed data using the final estimator.
+        If eval_idx is passed, splits the transformed data into train and eval
+        sets prior to fitting final estimator.
+
+        Parameters
+        ----------
+        X : iterable
+            Training data. Must fulfill input requirements of first step of the
+            pipeline.
+
+        y : iterable, default=None
+            Training targets. Must fulfill label requirements for all steps of
+            the pipeline.
+
+        eval_idx: tuple --> (list, list), default=None
+            Tuple of indexes for splitting X into train and eval datasets.
+
+        **fit_params : dict of string -> object
+            Parameters passed to the ``fit`` method of each step, where
+            each parameter name is prefixed such that parameter ``p`` for step
+            ``s`` has key ``s__p``.
+
+        Returns
+        -------
+        self : Pipeline
+            This estimator
+        """
+        Xt, fit_params = self._fit(X, y, **fit_params)
+
+        if self._final_estimator is not None:
+            early_stop_models = ['lightgbm.sklearn', 'xgboost.sklearn']
+
+            if eval_idx is not None:
+                es = [(Xt[eval_idx[0][1]], y[eval_idx[0][1]])]
+                Xt, y = Xt[eval_idx[0][0]], y[eval_idx[0][0]]
+            else:
+                es = None
+
+            if self._final_estimator.__module__ in early_stop_models:
+                self._final_estimator.fit(Xt, y, eval_set=es, **fit_params)
+            else:
+                self._final_estimator.fit(Xt, y, **fit_params)
+
+        return self
+
+
 class UniformClassifier(BaseEstimator, ClassifierMixin):
     '''
     Dumb classifier that predicts the same value for all predictions.
@@ -60,7 +116,7 @@ class UniformClassifier(BaseEstimator, ClassifierMixin):
         return np.ones(len(X)).reshape(-1, 1)
 
 
-def check_eval_metric(clf, fit_params, eval_X, eval_y):
+def check_eval_metric(clf, fit_params, eval_X, eval_y, prefix=None):
     '''
     A function for ensuring default metrics for early stopping
     evaluation are compatible with xgboost and lightgbm. Also adds
@@ -84,6 +140,9 @@ def check_eval_metric(clf, fit_params, eval_X, eval_y):
     eval_y: array-like, shape = [n_samples, ]
         True classification values to score early stopping.
 
+    prefix: str, optional
+        String prefix for parameter keys.
+
     Returns
     -------
     fit_params: dict
@@ -101,22 +160,25 @@ def check_eval_metric(clf, fit_params, eval_X, eval_y):
         module = clf.estimator.__module__
 
     if module in early_stop_berror:
-        fit_params['eval_set'] = [(eval_X, eval_y)]
+        if prefix is None:
+            prefix = ''
+            fit_params['eval_set'] = [(eval_X, eval_y)]
+
         binary = len(np.unique(eval_y)) == 2
 
-        if 'early_stopping_rounds' not in fit_params:
-            fit_params['early_stopping_rounds'] = 10
+        if prefix + 'early_stopping_rounds' not in fit_params:
+            fit_params[prefix + 'early_stopping_rounds'] = 10
 
-        if 'eval_metric' not in fit_params:
+        if prefix + 'eval_metric' not in fit_params:
             if binary:
-                fit_params['eval_metric'] = early_stop_berror[module]
+                fit_params[prefix + 'eval_metric'] = early_stop_berror[module]
             else:
-                fit_params['eval_metric'] = early_stop_mlog[module]
+                fit_params[prefix + 'eval_metric'] = early_stop_mlog[module]
         elif binary:
-            if fit_params['eval_metric'] in mlog:
-                fit_params['eval_metric'] = early_stop_berror[module]
-        elif fit_params['eval_metric'] in berror:
-            fit_params['eval_metric'] = early_stop_mlog[module]
+            if fit_params[prefix + 'eval_metric'] in mlog:
+                fit_params[prefix + 'eval_metric'] = early_stop_berror[module]
+        elif fit_params[prefix + 'eval_metric'] in berror:
+            fit_params[prefix + 'eval_metric'] = early_stop_mlog[module]
 
     return fit_params
 
@@ -229,6 +291,7 @@ def plot_2d_partial_dependence(oovr, X, col, col_names=None,
                                 examples=X)
 
     fig = pdep.plot_partial_dependence([col], pyint_model, with_variance=False,
+                                       figsize=(6, 4),
                                        grid_resolution=grid_resolution,
                                        grid_range=grid_range,
                                        n_jobs=n_jobs, n_samples=n_samples,

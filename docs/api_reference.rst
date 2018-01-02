@@ -5,7 +5,7 @@ API Reference
 
 `[View source on GitHub]`_
 
-.. py:class:: OrderedOVRClassifier(target=None, ovr_vals=None, model_dict=None, model_fit_params=None, fbeta_weight=1.0, train_final_model=True, train_final_only=False)
+.. py:class:: OrderedOVRClassifier(target=None, ovr_vals=None, model_dict=None, model_fit_params=None)
 
   **Description**
 
@@ -50,25 +50,14 @@ API Reference
 
           .. code-block:: python
 
-              model_fit_params = { value1 : {'sample_weight': None},
-                                   value2 : {'sample_weight': None},
-                                  'final' : {'verbose': False}}
-
-      fbeta_weight: float, default: 1.0
-          The strength of recall versus precision in the F-score.
-
-      train_final_model: bool, default: True
-          Whether to train a final model to the remaining data after OVR fits.
-
-      train_final_only: bool, default: False
-          Whether to ignore OVR modeling and to train the final model only.
+              model_fit_params = {'final' : {'verbose': False} }
 
   **Methods**
 
       +----------------------------------------------------------------------------------------------------------------------+
       | **Core API**                                                                                                         |
       +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`fit` (X[, y, eval_Set, drop_cols])                                                                           |
+      | :class:`fit` (X[, y, eval_set, drop_cols, fbeta_weight, train_final_model, train_final_only, model_fit_params])      |
       +----------------------------------------------------------------------------------------------------------------------+
       | :class:`predict` (X[, start, drop_cols])                                                                             |
       +----------------------------------------------------------------------------------------------------------------------+
@@ -84,11 +73,11 @@ API Reference
       +----------------------------------------------------------------------------------------------------------------------+
       | **Model Selection API**                                                                                              |
       +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test` (model, X[, y, eval_set, drop_cols])                                                               |
+      | :class:`fit_test` (model, X[, y, eval_set, drop_cols, fit_params])                                                   |
       +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test_ovr` (model, ovr_val, X[, y, eval_set, drop_cols])                                                  |
+      | :class:`fit_test_ovr` (model, ovr_val, X[, y, eval_set, drop_cols, fbeta_weight, fit_params])                        |
       +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test_grid` (grid_model, X[, y, eval_set, ovr_val, drop_cols])                                            |
+      | :class:`fit_test_grid` (grid_model, X[, y, eval_set, ovr_val, drop_cols, fit_params])                                |
       +----------------------------------------------------------------------------------------------------------------------+
       | :class:`attach_model` (oovr_model)                                                                                   |
       +----------------------------------------------------------------------------------------------------------------------+
@@ -106,15 +95,15 @@ API Reference
 Core API
 --------
 
-.. py:method:: OrderedOVRClassifier.fit(self, X, y=None, eval_set=None, drop_cols=None)
+.. py:method:: OrderedOVRClassifier.fit(self, X, y=None, eval_set=None, drop_cols=None, fbeta_weight=1.0, train_final_model=True, train_final_only=False, model_fit_params=None)
 
   **Description**
 
     Fits ``OrderedOVRClassifier`` and attaches trained models to the class pipeline.
 
-    If self.train_final_only=True (not default), fit skips the Ordered OVR training and trains/evaluates the model using the API for OrderedOVRClassifier on all classes.
+    If train_final_only=True (not default), fit skips the Ordered OVR training and trains/evaluates the model using the API for OrderedOVRClassifier on all classes.
 
-    If self.train_final_model=True (default), fit does training on remaining classes not specified in self.ovr_vals.
+    If train_final_model=True (default), fit does training on remaining classes not specified in self.ovr_vals.
 
     Binary models are evaluated with the imported plot_thresholds function, which evaluates precision, recall, and fscores for all thresholds with 0.01 interval spacing and automatically sets the threshold at the best weighted fscore. Multiclass models are evaluated using the imported extended_classification_report function.
 
@@ -131,6 +120,22 @@ Core API
 
       drop_cols: list of str, optional
           Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
+
+      fbeta_weight: float, optional, default: 1.0
+          The strength of recall versus precision in the F-score.
+
+      train_final_model: bool, optional, default: True
+          Whether to train a final model to the remaining data after OVR fits.
+
+      train_final_only: bool, optional, default: False
+          Whether to ignore OVR modeling and to train the final model only.
+
+      model_fit_params: dict of dict, optional
+          Additional parameters (inputted as a dict) to pass to the fit step of the models specified in self.model_dict.
+
+          .. code-block:: python
+
+              model_fit_params = {'final' : {'verbose': False} }
 
   **Returns**
 
@@ -290,7 +295,7 @@ Plotting API
 Model Selection API
 -------------------
 
-.. py:method:: OrderedOVRClassifier.fit_test(self, model, X, y=None, eval_set=None, drop_cols=None)
+.. py:method:: OrderedOVRClassifier.fit_test(self, model, X, y=None, eval_set=None, drop_cols=None, fit_params=None)
 
   **Description**
 
@@ -315,12 +320,15 @@ Model Selection API
       drop_cols: list of str, optional
           Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
 
+      fit_params: dict, optional
+          Key-value pairs of optional arguments to pass into model fit function.
+
   **Returns**
 
       model: OOVR_Model
           OVR fitted model trained against classification-masked X dataset.
 
-.. py:method:: OrderedOVRClassifier.fit_test_ovr(self, model, ovr_val, X, y=None, eval_set=None, drop_cols=None)
+.. py:method:: OrderedOVRClassifier.fit_test_ovr(self, model, ovr_val, X, y=None, eval_set=None, drop_cols=None, fbeta_weight=1.0, fit_params=None)
 
   **Description**
 
@@ -348,12 +356,18 @@ Model Selection API
       drop_cols: list of str, optional
           Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
 
+      fbeta_weight: float, optional, default: 1.0
+          The strength of recall versus precision in the F-score.
+
+      fit_params: dict, optional
+          Key-value pairs of optional arguments to pass into model fit function.
+
   **Returns**
 
       model: OOVR_Model
           OVR fitted model trained against classification-masked X dataset.
 
-.. py:method:: OrderedOVRClassifier.fit_test_grid(self, grid_model, X, y=None, eval_set=None, ovr_val=None, drop_cols=None)
+.. py:method:: OrderedOVRClassifier.fit_test_grid(self, grid_model, X, y=None, eval_set=None, ovr_val=None, drop_cols=None, fit_params=None)
 
   **Description**
 
@@ -380,6 +394,9 @@ Model Selection API
 
       drop_cols: list of str, optional
           Labels of columns to ignore in modeling, only applicable to pandas DataFrame X input.
+
+      fit_params: dict, optional
+          Key-value pairs of optional arguments to pass into model fit function.
 
   **Returns**
 
