@@ -44,6 +44,13 @@ class PipelineES(Pipeline):
     Modified Pipeline class that allows transformed dataset to be passed into
     the 'eval_set' parameter when fitting LGBMClassifier or XGBClassifier.
     '''
+    def _transform(self, X):
+        Xt = X
+        for name, transform in self.steps:
+            if hasattr(transform, 'transform'):
+                Xt = transform.transform(Xt)
+        return Xt
+
     def fit(self, X, y=None, eval_idx=None, **fit_params):
         """Fit the model
 
@@ -75,7 +82,12 @@ class PipelineES(Pipeline):
         self : Pipeline
             This estimator
         """
-        Xt, fit_params = self._fit(X, y, **fit_params)
+        if eval_idx is not None:
+            _, fit_params = self._fit(indexer(X, eval_idx[0][0]),
+                                      indexer(y, eval_idx[0][0]), **fit_params)
+            Xt = self._transform(X)
+        else:
+            Xt, fit_params = self._fit(X, y, **fit_params)
 
         if self._final_estimator is not None:
             early_stop_models = ['lightgbm.sklearn', 'xgboost.sklearn']
