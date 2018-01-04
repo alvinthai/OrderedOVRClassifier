@@ -81,8 +81,10 @@ class PipelineES(Pipeline):
             early_stop_models = ['lightgbm.sklearn', 'xgboost.sklearn']
 
             if eval_idx is not None:
-                es = [(Xt[eval_idx[0][1]], y[eval_idx[0][1]])]
-                Xt, y = Xt[eval_idx[0][0]], y[eval_idx[0][0]]
+                es = [(indexer(Xt, eval_idx[0][1]),
+                       indexer(y, eval_idx[0][1]))]
+                Xt = indexer(Xt, eval_idx[0][0])
+                y = indexer(y, eval_idx[0][0])
             else:
                 es = None
 
@@ -221,6 +223,29 @@ def extended_classification_report(y_true, y_pred):
     output.extend(['', 'accuracy: {}'.format(acc), ''])
 
     print('\n'.join(output))
+
+
+def indexer(arr, indexes):
+    '''
+    Performs an interger indexing operation based on the data type of <arr>.
+
+    Parameters
+    ----------
+    arr: array-like, shape = [n_samples, n_features]
+        Pandas or Numpy object to index.
+
+    indexes: array-like, shape = [n, ]
+        List of interger indexes to slice.
+
+    Returns
+    -------
+    arr: array-like, shape = [n, n_features]
+        Pandas or Numpy object indexed to rows specified in <indexes>.
+    '''
+    if arr.__class__ in [pd.core.frame.DataFrame, pd.core.series.Series]:
+        return arr.iloc[indexes]
+    else:
+        return arr[indexes]
 
 
 def plot_2d_partial_dependence(oovr, X, col, col_names=None,
