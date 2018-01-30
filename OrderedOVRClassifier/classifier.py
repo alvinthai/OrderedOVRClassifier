@@ -1461,7 +1461,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Predicted multi-class targets.
         '''
         X = self._pred_cleanup(X, drop_cols)
-        pred = np.zeros(len(X))
+        pred = np.array(np.zeros(len(X)), self._le.classes_.dtype)
         mask = np.zeros(len(X)).astype(bool)
 
         # predictions from the One-Vs-Rest classifiers
