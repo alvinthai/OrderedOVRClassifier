@@ -78,7 +78,7 @@ OrderedOVRClassifier could also be used to train multi-classification problems w
 To use OrderedOVRClassifier for Ordered One-Vs-Rest Classification, the ordered steps for the classification must be specified with the ``ovr_vals`` parameter and the model(s) used to train the binary classifiers must be specified in the ``model_dict`` parameter. The model used to train the remaining classes should be specified with a ``'final'`` key in the ``model_dict``. Refer to the [tutorial](http://nbviewer.jupyter.org/github/alvinthai/OrderedOVRClassifier/blob/master/examples/example.ipynb) for more specific usage examples.
 
 ```python
-from OrderedOVRClassifier.classifier import OrderedOVRClassifier
+from OrderedOVRClassifier import OrderedOVRClassifier
 
 ovr_vals = ['1st class', '2nd class']
 
