@@ -268,7 +268,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         if eval_set is None:
             return None
 
-        if eval_set.__class__ == pd.DataFrame:  # eval_set is a DataFrame
+        if type(eval_set) == pd.core.frame.DataFrame:  # eval_set is DataFrame
             eval_X = eval_set.drop(drop_cols, axis=1)
             eval_y = eval_set[self.target]
             eval_set = [(eval_X, eval_y)]
@@ -277,7 +277,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             if len(eval_set[0]) != 2:
                 raise AssertionError('Invalid shape for eval_set')
 
-            if eval_set[0][0].__class__ == pd.DataFrame:
+            if type(eval_set[0][0]) == pd.core.frame.DataFrame:
                 eval_X = eval_set[0][0].drop(drop_cols, axis=1)
                 eval_set = [(eval_X, pd.Series(eval_set[0][1]))]
 
@@ -286,7 +286,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
         assert len(eval_set[0][0]) == len(eval_set[0][1])
 
-        if eval_set[0][0].__class__ == pd.DataFrame:
+        if type(eval_set[0][0]) == pd.core.frame.DataFrame:
             if not all(self.input_cols == eval_X.columns):
                 raise AssertionError("Incompatible columns! Please check "
                                      "if columns in X dataframe of "
@@ -412,7 +412,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         return clf
 
     def _fit_ovr(self, X, y, eval_set, ovr_vals, fbeta_weight, enc, attach,
-                 model=None, fit_params=None):
+                 model=None, fit_params=None, set_threshold=None):
         '''
         Utility function for fitting or testing a model in a OVR fashion
         against a (possibly) classification-masked X-dataset.
@@ -451,6 +451,11 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Key-value pairs of optional arguments to pass into model fit
             function.
 
+        set_threshold: dict of float (between 0 and 1), optional
+            (OVR key: threshold value) pairs of user selected thresholds for
+            OVR modeling. If None (default), thresholds are selected based on
+            best weighted fscore.
+
         Returns
         -------
         clf: OOVR_Model or None
@@ -464,7 +469,22 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         if eval_set is not None and self._eval_mask is None:
             self._eval_mask = np.zeros(len(eval_set[0][1])).astype(bool)
 
-        for ovr_val in ovr_vals:
+        if set_threshold is None:
+            set_threshold = {}
+
+        for i, ovr_val in enumerate(ovr_vals):
+            prt = 'starting OVR fit for value: {} ...'.format(ovr_val)
+
+            if i == 0:
+                print(prt)
+            else:
+                note = 'NOTE: metrics for value={} reported during training '\
+                       'excludes classes\nfrom previous models. The final '\
+                       'classification report may have different\nprecision, '\
+                       'recall, and f1 scores due to incorrect '\
+                       'classifications from\nprevious models.'.format(ovr_val)
+                print('', '-'*80, prt, '', note, sep='\n')
+
             if attach and fit_params is not None:
                 # attach == True when fit (and not fit_test_ovr) is called
                 # if specified, fit_params is expected to be dict of dict
@@ -477,23 +497,28 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             clf, fit_ovr_params = self._get_model(ovr_val, eval_X, eval_y,
                                                   model, fit_ovr_params)
             clf = self._fit_model(clf, Xm, ym, ovr_val, fit_ovr_params)
-            title = str(ovr_val).title()
 
-            # Use best weighted fscore as threshold and set mask for future
-            # steps to remove true values for class from subsequent training.
+            title = str(ovr_val).title()
+            set_thld = set_threshold.get(ovr_val, None)
+
+            # Use best weighted fscore (or user specified threshold if
+            # provided) as threshold and set mask for future steps to remove
+            # true values for class from subsequent training.
             if eval_set is None:
                 best, scores = u.plot_thresholds(clf, Xm, ym, fbeta_weight,
-                                                 '{} vs. Rest'.format(title))
+                                                 '{} vs. Rest'.format(title),
+                                                 set_thld)
             else:
                 best, scores = u.plot_thresholds(clf, eval_X, eval_y,
                                                  fbeta_weight,
-                                                 '{} vs. Rest'.format(title))
+                                                 '{} vs. Rest'.format(title),
+                                                 set_thld)
 
             model_attr = {
                 'model': clf,
                 'ovr_val': ovr_val,
                 'rest_precision': scores[0][0],
-                'thresholds': best/100,
+                'thresholds': best,
                 '_le': enc,
                 '_mask': np.logical_or(self._mask, y == ovr_val)
             }
@@ -746,7 +771,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
                                'Classifier in the sequence specified '
                                'by the user-inputted ovr_vals.')
 
-        if X.__class__ == pd.DataFrame:
+        if type(X) == pd.core.frame.DataFrame:
             if drop_cols is None:
                 drop_cols = []
 
@@ -790,7 +815,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         col_names: list
             Names to call features.
         '''
-        if X.__class__ == pd.DataFrame:
+        if type(X) == pd.core.frame.DataFrame:
             col_names = X.columns
             X = X.values
         else:
@@ -874,7 +899,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         assert len(X) == len(y)
 
         # Drop columns if X is DataFrame and drop_cols is specified
-        if X.__class__ == pd.DataFrame:
+        if type(X) == pd.core.frame.DataFrame:
             X = X.drop(drop_cols, axis=1)
 
             if self.input_cols is None:
@@ -919,7 +944,7 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
     def fit(self, X, y=None, eval_set=None, drop_cols=None, fbeta_weight=1.0,
             train_final_model=True, train_final_only=False,
-            model_fit_params=None):
+            model_fit_params=None, set_threshold=None):
         '''
         Fits OrderedOVRClassifier and attaches trained models to the class
         pipeline.
@@ -934,8 +959,9 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         Binary models are evaluated with the imported plot_thresholds function,
         which evaluates precision, recall, and fscores for all thresholds
         with 0.01 interval spacing and automatically sets the threshold at the
-        best weighted fscore. Multiclass models are evaluated using the
-        imported extended_classification_report function.
+        best weighted fscore (or at user specified thresholds if set_threshold
+        is provided). Multiclass models are evaluated using the imported
+        extended_classification_report function.
 
         Parameters
         ----------
@@ -969,6 +995,11 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
 
             i.e. model_fit_params = {'final': {'verbose': False} }
 
+        set_threshold: dict of float (between 0 and 1), optional
+            (OVR key: threshold value) pairs of user selected thresholds for
+            OVR modeling. If None (default), thresholds are selected based on
+            best weighted fscore.
+
         Returns
         -------
         self
@@ -991,7 +1022,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             # run _fit_ovr
             ovr_vals = self._check_ovr(y)
             self._fit_ovr(X, y, eval_set, ovr_vals, fbeta_weight, enc,
-                          attach=True, fit_params=model_fit_params)
+                          attach=True, fit_params=model_fit_params,
+                          set_threshold=set_threshold)
         else:
             self.ovr_vals = []
 
@@ -1165,9 +1197,9 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         if eval_X is not None:
             n = 1 + int(mclass[-1][:8] == 'Pipeline')
 
-            if X.__class__ == pd.DataFrame:
+            if type(X) == pd.core.frame.DataFrame:
                 X = pd.concat([Xm] + list(repeat(eval_X, n)))
-            elif X.__class__ == np.ndarray:
+            else:
                 X = np.vstack([Xm] + list(repeat(eval_X, n)))
 
             y = np.hstack([ym] + list(repeat(eval_y, n)))
@@ -1202,7 +1234,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         return grid_model
 
     def fit_test_ovr(self, model, ovr_val, X, y=None, eval_set=None,
-                     drop_cols=None, fbeta_weight=1.0, fit_params=None):
+                     drop_cols=None, fbeta_weight=1.0, fit_params=None,
+                     set_threshold=None):
         '''
         Function for training an OVR model against a (possibly) classification
         masked X dataset. Does not attach trained model to the pipeline for
@@ -1246,6 +1279,11 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             Key-value pairs of optional arguments to pass into model fit
             function.
 
+        set_threshold: dict of float (between 0 and 1), optional
+            (OVR key: threshold value) pairs of user selected thresholds for
+            OVR modeling. If None (default), threshold is selected based on
+            best weighted fscore.
+
         Returns
         -------
         model: OOVR_Model
@@ -1263,7 +1301,8 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
             enc = self._le.fit(y)
 
         model = self._fit_ovr(X, y, eval_set, [ovr_val], fbeta_weight, enc,
-                              attach=False, model=model, fit_params=fit_params)
+                              attach=False, model=model, fit_params=fit_params,
+                              set_threshold=set_threshold)
 
         return model
 
@@ -1345,37 +1384,6 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         return u.plot_feature_importance(self, X, y, col_names, filter_class,
                                          n_jobs, n_samples, progressbar)
 
-    def plot_oovr_dependencies(self, ovr_val, X, y=None, comp_vals=None,
-                               drop_cols=None):
-        '''
-        Evaluates the effect of changing the threshold of an ordered OVR
-        classifier against other classes with respect to accuracy, precision,
-        recall, and f1 metrics.
-
-        Parameters
-        ----------
-        ovr_val: str, int, or float
-            Class label to evaluate metrics against other classes.
-
-        X: array-like, shape = [n_samples, n_features]
-            Data used for predictions.
-
-        y: array-like, shape = [n_samples, ], optional
-            True labels for X. If not provided and X is a DataFrame, will
-            extract y column from X with the provided self.target value.
-
-        comp_vals: list of str, optional
-            List of classes to compare against the trained classifier for
-            ovr_val. If None, all other classes will be compared against the
-            ovr_val class.
-
-        drop_cols: list of str, optional
-            Labels of columns ignored in modeling, only applicable to pandas
-            DataFrame X input.
-        '''
-        X, y, _ = self._xy_transform(X, y, drop_cols)
-        return u.plot_oovr_dependencies(self, ovr_val, X, y, comp_vals)
-
     def plot_partial_dependence(self, X, col, grid_resolution=100,
                                 grid_range=(.05, 0.95), n_jobs=-1,
                                 n_samples=1000, progressbar=True,
@@ -1434,6 +1442,37 @@ class OrderedOVRClassifier(BaseEstimator, ClassifierMixin):
         return u.plot_2d_partial_dependence(self, X, col, col_names,
                                             grid_resolution, grid_range,
                                             n_jobs, n_samples, progressbar)
+
+    def plot_threshold_dependence(self, ovr_val, X, y=None, comp_vals=None,
+                                  drop_cols=None):
+        '''
+        Evaluates the effect of changing the threshold of an ordered OVR
+        classifier against other classes with respect to accuracy, precision,
+        recall, and f1 metrics.
+
+        Parameters
+        ----------
+        ovr_val: str, int, or float
+            Class label to evaluate metrics against other classes.
+
+        X: array-like, shape = [n_samples, n_features]
+            Data used for predictions.
+
+        y: array-like, shape = [n_samples, ], optional
+            True labels for X. If not provided and X is a DataFrame, will
+            extract y column from X with the provided self.target value.
+
+        comp_vals: list of str, optional
+            List of classes to compare against the trained classifier for
+            ovr_val. If None, all other classes will be compared against the
+            ovr_val class.
+
+        drop_cols: list of str, optional
+            Labels of columns ignored in modeling, only applicable to pandas
+            DataFrame X input.
+        '''
+        X, y, _ = self._xy_transform(X, y, drop_cols)
+        return u.plot_threshold_dependence(self, ovr_val, X, y, comp_vals)
 
     def predict(self, X, start=0, drop_cols=None):
         '''

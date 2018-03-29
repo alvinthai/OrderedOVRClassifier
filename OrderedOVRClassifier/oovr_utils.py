@@ -420,7 +420,7 @@ def plot_feature_importance(oovr, X, y, col_names=None, filter_class=None,
     plt.show()
 
 
-def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
+def plot_threshold_dependence(oovr, ovr_val, X, y, comp_vals=None):
     '''
     Evaluates the effect of changing the threshold of an ordered OVR
     classifier against other classes with respect to accuracy, precision,
@@ -476,8 +476,8 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
         lbl = oovr.pipeline[i][0]
 
         if lbl in comp_vals:
-            comp_vals.remove(l)
-            comp_idxs.remove(oovr._le.transform([l]))
+            comp_vals.remove(lbl)
+            comp_idxs.remove(oovr._le.transform([lbl]))
 
             print('Will not evaluate partial classification dependencies for '
                   '"{0} vs. {1}" because {1} is classified at an earlier step '
@@ -568,16 +568,19 @@ def plot_oovr_dependencies(oovr, ovr_val, X, y, comp_vals=None):
         plt.show(block=False)
 
 
-def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
+def plot_thresholds(clf, X, y_true, beta=1.0, title=None, set_thld=None):
     '''
     Function for plotting the accuracy, precision, recall, fscore, and weighted
     fscore of probability predictions for a binary classifier.
 
-    Returns the probability for the best weighted fscore, which is a class
-    imbalance average of the fscores for both positive and negative class.
-    Weighted fscore is generally a useful metric when a prediction for every
-    data point matters, as no classes are considered more important than the
-    other.
+    If set_thld == None (default), returns the probability for the best
+    weighted fscore, which is a class imbalance average of the fscores for both
+    positive and negative class. Weighted fscore is generally a useful metric
+    when a prediction for every data point matters, as no classes are
+    considered more important than the other.
+
+    If set_thld is specified, user specified threshold for binary classifier
+    will be used in plots and set_thld will be returned instead.
 
     Parameters
     ----------
@@ -596,15 +599,20 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
     title: str, optional
         Title for plots.
 
+    set_thld: float (between 0 and 1), optional
+        Threshold to use for OVR modeling. If None (default), threshold is
+        selected based on best weighted fscore.
+
     Returns
     -------
-    best: float
-        Threshold that maximizes the weighted fscore.
+    selected: float
+        If set_thld == None (default), returns the threshold that maximizes the
+        weighted fscore. If set_thld is specified, returns set_thld.
 
-    scores_at_best: ([1, 3], [1, 3]) tuple
-        A tuple with the class [precision, recall, fscore] scores at the best
-        threshold. 1st element contains scores for the False class and 2nd
-        element contains scores for the True class.
+    scores_at_selected: ([1, 3], [1, 3]) tuple
+        A tuple with the class [precision, recall, fscore] scores at the
+        selected threshold. 1st element contains scores for the False class and
+        2nd element contains scores for the True class.
     '''
     probas = clf.predict_proba(X)
 
@@ -628,12 +636,19 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
         scores1.append([thld, p[1], r[1], f[1]])
 
     scores = np.array(scores)
-    best = np.argmax(scores[:, 2])
 
     if beta == 1.0:
         flabel = 'f1'
     else:
         flabel = 'fbeta'
+
+    if set_thld >= 0 and set_thld <= 1:
+        # set_thld is float between 0 and 1, select index of closest threshold
+        select_thld = (np.abs(thlds-set_thld)).argmin()
+        lbl = 'selected threshold'
+    else:
+        select_thld = np.argmax(scores[:, 2])
+        lbl = 'best {}_weighted'.format(flabel)
 
     cols = ['threshold', 'accuracy', '{}_weighted'.format(flabel)]
     cols0 = ['threshold', 'precision_False', 'recall_False',
@@ -644,15 +659,17 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
     scores = pd.DataFrame(scores, columns=cols)
     scores0 = pd.DataFrame(scores0, columns=cols0)
     scores1 = pd.DataFrame(scores1, columns=cols1)
-    scores_at_best = (scores0.iloc[best, 1:].values,
-                      scores1.iloc[best, 1:].values)
+
+    scores_at_select_thld = (scores0.iloc[select_thld, 1:].values,
+                             scores1.iloc[select_thld, 1:].values)
+    select_thld = select_thld/100
 
     for df in [scores, scores0, scores1]:
         df = df.set_index('threshold')
 
         df.plot()
-        plt.vlines(best/100, 0, 1, color='purple', linestyle='--',
-                   label='best {}_weighted'.format(flabel))
+        plt.vlines(select_thld, 0, 1, color='purple', linestyle='--',
+                   label=lbl)
 
         plt.title(title)
         plt.ylabel('score')
@@ -664,10 +681,10 @@ def plot_thresholds(clf, X, y_true, beta=1.0, title=None):
         plt.show(block=False)
 
     print('-'*80)
-    print('best_threshold:', thlds[best])
-    print('pred_cnt:', (probas[:, 1] >= thlds[best]).sum())
+    print('selected_threshold:', select_thld)
+    print('pred_cnt:', (probas[:, 1] >= select_thld).sum())
     print('true_cnt:', y_true.sum(), '\n')
 
-    extended_classification_report(y_true, probas[:, 1] >= thlds[best])
+    extended_classification_report(y_true, probas[:, 1] >= select_thld)
 
-    return best, scores_at_best
+    return select_thld, scores_at_select_thld

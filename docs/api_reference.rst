@@ -22,7 +22,7 @@ API Reference
 
     Refer to this notebook_ for a tutorial on how to use the API for OrderedOVRClassifier.
 
-    OrderedOVRClassifier runs custom evaluation functions to diagnose and/or plot the predictive performance of the classification after training each model. With Ordered One-Vs-Rest Classification, the binary outcome from an Ordered One-Vs-Rest model can be optimized to achieve an ideal mix of accuracy/precision/recall scores among each predictive class. Call the :class:`plot_oovr_dependencies` function on a fully trained OrderedOVRClassifier model to execute these evaluations.
+    OrderedOVRClassifier runs custom evaluation functions to diagnose and/or plot the predictive performance of the classification after training each model. With Ordered One-Vs-Rest Classification, the binary outcome from an Ordered One-Vs-Rest model can be optimized to achieve an ideal mix of accuracy/precision/recall scores among each predictive class. Call the :class:`plot_threshold_dependence` function on a fully trained OrderedOVRClassifier model to execute these evaluations.
 
     OrderedOVRClassifier is designed to be modular and models can be tested without changing the fit state of OrderedOVRClassifier. These models can be manually attached to OrderedOVRClassifier at a later time. Additionally, a grid search wrapper is built into the API for hyper-parameter tuning against classification-subsetted datasets.
 
@@ -54,48 +54,48 @@ API Reference
 
   **Methods**
 
-      +----------------------------------------------------------------------------------------------------------------------+
-      | **Core API**                                                                                                         |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`fit` (X[, y, eval_set, drop_cols, fbeta_weight, train_final_model, train_final_only, model_fit_params])      |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`predict` (X[, start, drop_cols])                                                                             |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`predict_proba` (X[, score_type, drop_cols])                                                                  |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | **Plotting API**                                                                                                     |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`plot_feature_importance` (X[, y, filter_class, n_jobs, n_samples, progressbar, drop_cols])                   |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`plot_partial_dependence` (X, col[, grid_resolution, grid_range, n_jobs, n_samples, progressbar, drop_cols])  |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`plot_oovr_dependencies` (ovr_val, X[, y, comp_vals, drop_cols])                                              |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | **Model Selection API**                                                                                              |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test` (model, X[, y, eval_set, drop_cols, fit_params])                                                   |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test_ovr` (model, ovr_val, X[, y, eval_set, drop_cols, fbeta_weight, fit_params])                        |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`fit_test_grid` (grid_model, X[, y, eval_set, ovr_val, drop_cols, fit_params])                                |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`attach_model` (oovr_model)                                                                                   |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | **Miscellaneous API**                                                                                                |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`multiclassification_report` (X[, y, drop_cols])                                                              |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`predict_json` (row)                                                                                          |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`predict_proba_json` (row[, score_type, print_prob])                                                          |
-      +----------------------------------------------------------------------------------------------------------------------+
-      | :class:`score` (X[, y, sample_weight, drop_cols])                                                                    |
-      +----------------------------------------------------------------------------------------------------------------------+
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | **Core API**                                                                                                                    |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`fit` (X[, y, eval_set, drop_cols, fbeta_weight, train_final_model, train_final_only, model_fit_params, set_threshold])  |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`predict` (X[, start, drop_cols])                                                                                        |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`predict_proba` (X[, score_type, drop_cols])                                                                             |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | **Plotting API**                                                                                                                |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`plot_feature_importance` (X[, y, filter_class, n_jobs, n_samples, progressbar, drop_cols])                              |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`plot_partial_dependence` (X, col[, grid_resolution, grid_range, n_jobs, n_samples, progressbar, drop_cols])             |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`plot_threshold_dependence` (ovr_val, X[, y, comp_vals, drop_cols])                                                      |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | **Model Selection API**                                                                                                         |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test` (model, X[, y, eval_set, drop_cols, fit_params])                                                              |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test_ovr` (model, ovr_val, X[, y, eval_set, drop_cols, fbeta_weight, fit_params, set_threshold])                    |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`fit_test_grid` (grid_model, X[, y, eval_set, ovr_val, drop_cols, fit_params])                                           |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`attach_model` (oovr_model)                                                                                              |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | **Miscellaneous API**                                                                                                           |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`multiclassification_report` (X[, y, drop_cols])                                                                         |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`predict_json` (row)                                                                                                     |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`predict_proba_json` (row[, score_type, print_prob])                                                                     |
+      +---------------------------------------------------------------------------------------------------------------------------------+
+      | :class:`score` (X[, y, sample_weight, drop_cols])                                                                               |
+      +---------------------------------------------------------------------------------------------------------------------------------+
 
 Core API
 --------
 
-.. py:method:: OrderedOVRClassifier.fit(self, X, y=None, eval_set=None, drop_cols=None, fbeta_weight=1.0, train_final_model=True, train_final_only=False, model_fit_params=None)
+.. py:method:: OrderedOVRClassifier.fit(self, X, y=None, eval_set=None, drop_cols=None, fbeta_weight=1.0, train_final_model=True, train_final_only=False, model_fit_params=None, set_threshold=None)
 
   **Description**
 
@@ -105,7 +105,7 @@ Core API
 
     If train_final_model=True (default), fit does training on remaining classes not specified in self.ovr_vals.
 
-    Binary models are evaluated with the imported plot_thresholds function, which evaluates precision, recall, and fscores for all thresholds with 0.01 interval spacing and automatically sets the threshold at the best weighted fscore. Multiclass models are evaluated using the imported extended_classification_report function.
+    Binary models are evaluated with the imported plot_thresholds function, which evaluates precision, recall, and fscores for all thresholds with 0.01 interval spacing and automatically sets the threshold at the best weighted fscore (or at user specified thresholds if set_threshold is provided). Multiclass models are evaluated using the imported extended_classification_report function.
 
   **Parameters**
 
@@ -136,6 +136,9 @@ Core API
           .. code-block:: python
 
               model_fit_params = {'final' : {'verbose': False} }
+
+      set_threshold: dict of float (between 0 and 1), optional
+          (OVR key: threshold value) pairs of user selected thresholds for OVR modeling. If None (default), thresholds are selected based on best weighted fscore.
 
   **Returns**
 
@@ -269,7 +272,7 @@ Plotting API
       drop_cols: list of str, optional
           Labels of columns ignored in modeling, only applicable to pandas DataFrame X input.
 
-.. py:method:: OrderedOVRClassifier.plot_oovr_dependencies(self, ovr_val, X, y=None, comp_vals=None, drop_cols=None)
+.. py:method:: OrderedOVRClassifier.plot_threshold_dependence(self, ovr_val, X, y=None, comp_vals=None, drop_cols=None)
 
   **Description**
 
@@ -328,7 +331,7 @@ Model Selection API
       model: OOVR_Model
           OVR fitted model trained against classification-masked X dataset.
 
-.. py:method:: OrderedOVRClassifier.fit_test_ovr(self, model, ovr_val, X, y=None, eval_set=None, drop_cols=None, fbeta_weight=1.0, fit_params=None)
+.. py:method:: OrderedOVRClassifier.fit_test_ovr(self, model, ovr_val, X, y=None, eval_set=None, drop_cols=None, fbeta_weight=1.0, fit_params=None, set_threshold=None)
 
   **Description**
 
@@ -361,6 +364,9 @@ Model Selection API
 
       fit_params: dict, optional
           Key-value pairs of optional arguments to pass into model fit function.
+
+      set_threshold: dict of float (between 0 and 1), optional
+          (OVR key: threshold value) pairs of user selected thresholds for OVR modeling. If None (default), threshold is selected based on best weighted fscore.
 
   **Returns**
 
@@ -400,8 +406,8 @@ Model Selection API
 
   **Returns**
 
-      model: OOVR_Model
-          OVR fitted model trained against classification-masked X dataset.
+      grid_model: GridSearchCV or RandomizedSearchCV model
+          Hyper-parameter optimizer model with recorded optimization results. Note that by design, retrain is set to False, and the user will need to train a new model with the best parameters found if they choose to attach the model to the OrderedOVRClassifier pipeline.
 
 .. py:method:: OrderedOVRClassifier.attach_model(self, oovr_model)
 

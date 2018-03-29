@@ -114,7 +114,7 @@ oovr.plot_partial_dependence(train_df, 'some_column')
 oovr.multiclassification_report(test_df)
 
 # plot threshold dependent accuracy/precision/recall/f1
-oovr.plot_oovr_dependencies('some_class', test_df)
+oovr.plot_threshold_dependence('some_class', test_df)
 ```
 
 ## Using OrderedOVRClassifier Modularly
