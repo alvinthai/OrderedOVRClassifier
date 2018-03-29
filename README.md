@@ -113,7 +113,7 @@ oovr.plot_partial_dependence(train_df, 'some_column')
 # generate multi-classification precision/recall/f1/accuracy report
 oovr.multiclassification_report(test_df)
 
-# plot thresholds for binary classification vs precision/recall/f1/accuracy
+# plot threshold dependent accuracy/precision/recall/f1
 oovr.plot_oovr_dependencies('some_class', test_df)
 ```
 
