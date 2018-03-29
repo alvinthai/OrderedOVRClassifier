@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>API Reference &mdash; OrderedOVRClassifier 1.1.0 documentation</title>
+  <title>API Reference &mdash; OrderedOVRClassifier 1.1.2 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="OrderedOVRClassifier 1.1.0 documentation" href="index.html"/>
+    <link rel="top" title="OrderedOVRClassifier 1.1.2 documentation" href="index.html"/>
         <link rel="prev" title="Welcome to OrderedOVRClassifier’s documentation!" href="index.html"/>
     <link href="_static/my_theme.css" rel="stylesheet" type="text/css">
 
@@ -178,7 +178,7 @@
 </pre></div>
 </div>
 <p>Refer to this <a class="reference external" href="http://nbviewer.jupyter.org/github/alvinthai/OrderedOVRClassifier/blob/master/examples/example.ipynb">notebook</a> for a tutorial on how to use the API for OrderedOVRClassifier.</p>
-<p>OrderedOVRClassifier runs custom evaluation functions to diagnose and/or plot the predictive performance of the classification after training each model. With Ordered One-Vs-Rest Classification, the binary outcome from an Ordered One-Vs-Rest model can be optimized to achieve an ideal mix of accuracy/precision/recall scores among each predictive class. Call the <a class="reference internal" href="#OrderedOVRClassifier.plot_oovr_dependencies" title="OrderedOVRClassifier.plot_oovr_dependencies"><code class="xref py py-class docutils literal"><span class="pre">plot_oovr_dependencies</span></code></a> function on a fully trained OrderedOVRClassifier model to execute these evaluations.</p>
+<p>OrderedOVRClassifier runs custom evaluation functions to diagnose and/or plot the predictive performance of the classification after training each model. With Ordered One-Vs-Rest Classification, the binary outcome from an Ordered One-Vs-Rest model can be optimized to achieve an ideal mix of accuracy/precision/recall scores among each predictive class. Call the <a class="reference internal" href="#OrderedOVRClassifier.plot_threshold_dependence" title="OrderedOVRClassifier.plot_threshold_dependence"><code class="xref py py-class docutils literal"><span class="pre">plot_threshold_dependence</span></code></a> function on a fully trained OrderedOVRClassifier model to execute these evaluations.</p>
 <p>OrderedOVRClassifier is designed to be modular and models can be tested without changing the fit state of OrderedOVRClassifier. These models can be manually attached to OrderedOVRClassifier at a later time. Additionally, a grid search wrapper is built into the API for hyper-parameter tuning against classification-subsetted datasets.</p>
 <p>OrderedOVRClassifier also includes utilities for model agnostic evaluation of feature importances and partial dependence. These model agnostic evaluation utilities (<a class="reference internal" href="#OrderedOVRClassifier.plot_feature_importance" title="OrderedOVRClassifier.plot_feature_importance"><code class="xref py py-class docutils literal"><span class="pre">plot_feature_importance</span></code></a> and <a class="reference internal" href="#OrderedOVRClassifier.plot_partial_dependence" title="OrderedOVRClassifier.plot_partial_dependence"><code class="xref py py-class docutils literal"><span class="pre">plot_partial_dependence</span></code></a>) require the skater library and are approximations based on a random sample of the data.</p>
 </div></blockquote>
@@ -214,7 +214,7 @@
 <tbody valign="top">
 <tr class="row-odd"><td><strong>Core API</strong></td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit" title="OrderedOVRClassifier.fit"><code class="xref py py-class docutils literal"><span class="pre">fit</span></code></a> (X[, y, eval_set, drop_cols, fbeta_weight, train_final_model, train_final_only, model_fit_params])</td>
+<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit" title="OrderedOVRClassifier.fit"><code class="xref py py-class docutils literal"><span class="pre">fit</span></code></a> (X[, y, eval_set, drop_cols, fbeta_weight, train_final_model, train_final_only, model_fit_params, set_threshold])</td>
 </tr>
 <tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.predict" title="OrderedOVRClassifier.predict"><code class="xref py py-class docutils literal"><span class="pre">predict</span></code></a> (X[, start, drop_cols])</td>
 </tr>
@@ -226,13 +226,13 @@
 </tr>
 <tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.plot_partial_dependence" title="OrderedOVRClassifier.plot_partial_dependence"><code class="xref py py-class docutils literal"><span class="pre">plot_partial_dependence</span></code></a> (X, col[, grid_resolution, grid_range, n_jobs, n_samples, progressbar, drop_cols])</td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.plot_oovr_dependencies" title="OrderedOVRClassifier.plot_oovr_dependencies"><code class="xref py py-class docutils literal"><span class="pre">plot_oovr_dependencies</span></code></a> (ovr_val, X[, y, comp_vals, drop_cols])</td>
+<tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.plot_threshold_dependence" title="OrderedOVRClassifier.plot_threshold_dependence"><code class="xref py py-class docutils literal"><span class="pre">plot_threshold_dependence</span></code></a> (ovr_val, X[, y, comp_vals, drop_cols])</td>
 </tr>
 <tr class="row-odd"><td><strong>Model Selection API</strong></td>
 </tr>
 <tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test" title="OrderedOVRClassifier.fit_test"><code class="xref py py-class docutils literal"><span class="pre">fit_test</span></code></a> (model, X[, y, eval_set, drop_cols, fit_params])</td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test_ovr" title="OrderedOVRClassifier.fit_test_ovr"><code class="xref py py-class docutils literal"><span class="pre">fit_test_ovr</span></code></a> (model, ovr_val, X[, y, eval_set, drop_cols, fbeta_weight, fit_params])</td>
+<tr class="row-odd"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test_ovr" title="OrderedOVRClassifier.fit_test_ovr"><code class="xref py py-class docutils literal"><span class="pre">fit_test_ovr</span></code></a> (model, ovr_val, X[, y, eval_set, drop_cols, fbeta_weight, fit_params, set_threshold])</td>
 </tr>
 <tr class="row-even"><td><a class="reference internal" href="#OrderedOVRClassifier.fit_test_grid" title="OrderedOVRClassifier.fit_test_grid"><code class="xref py py-class docutils literal"><span class="pre">fit_test_grid</span></code></a> (grid_model, X[, y, eval_set, ovr_val, drop_cols, fit_params])</td>
 </tr>
@@ -257,13 +257,13 @@
 <h2>Core API<a class="headerlink" href="#core-api" title="Permalink to this headline">¶</a></h2>
 <dl class="method">
 <dt id="OrderedOVRClassifier.fit">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em>, <em>fbeta_weight=1.0</em>, <em>train_final_model=True</em>, <em>train_final_only=False</em>, <em>model_fit_params=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit</code><span class="sig-paren">(</span><em>self</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em>, <em>fbeta_weight=1.0</em>, <em>train_final_model=True</em>, <em>train_final_only=False</em>, <em>model_fit_params=None</em>, <em>set_threshold=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>Fits <code class="docutils literal"><span class="pre">OrderedOVRClassifier</span></code> and attaches trained models to the class pipeline.</p>
 <p>If train_final_only=True (not default), fit skips the Ordered OVR training and trains/evaluates the model using the API for OrderedOVRClassifier on all classes.</p>
 <p>If train_final_model=True (default), fit does training on remaining classes not specified in self.ovr_vals.</p>
-<p>Binary models are evaluated with the imported plot_thresholds function, which evaluates precision, recall, and fscores for all thresholds with 0.01 interval spacing and automatically sets the threshold at the best weighted fscore. Multiclass models are evaluated using the imported extended_classification_report function.</p>
+<p>Binary models are evaluated with the imported plot_thresholds function, which evaluates precision, recall, and fscores for all thresholds with 0.01 interval spacing and automatically sets the threshold at the best weighted fscore (or at user specified thresholds if set_threshold is provided). Multiclass models are evaluated using the imported extended_classification_report function.</p>
 </div></blockquote>
 <p><strong>Parameters</strong></p>
 <blockquote>
@@ -288,6 +288,8 @@
 </pre></div>
 </div>
 </dd>
+<dt>set_threshold: dict of float (between 0 and 1), optional</dt>
+<dd>(OVR key: threshold value) pairs of user selected thresholds for OVR modeling. If None (default), thresholds are selected based on best weighted fscore.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
@@ -428,8 +430,8 @@
 </dd></dl>
 
 <dl class="method">
-<dt id="OrderedOVRClassifier.plot_oovr_dependencies">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">plot_oovr_dependencies</code><span class="sig-paren">(</span><em>self</em>, <em>ovr_val</em>, <em>X</em>, <em>y=None</em>, <em>comp_vals=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.plot_oovr_dependencies" title="Permalink to this definition">¶</a></dt>
+<dt id="OrderedOVRClassifier.plot_threshold_dependence">
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">plot_threshold_dependence</code><span class="sig-paren">(</span><em>self</em>, <em>ovr_val</em>, <em>X</em>, <em>y=None</em>, <em>comp_vals=None</em>, <em>drop_cols=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.plot_threshold_dependence" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div>Evaluates the effect of changing the threshold of an ordered OVR classifier against other classes with respect to accuracy, precision, recall, and f1 metrics.</div></blockquote>
@@ -489,7 +491,7 @@
 
 <dl class="method">
 <dt id="OrderedOVRClassifier.fit_test_ovr">
-<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test_ovr</code><span class="sig-paren">(</span><em>self</em>, <em>model</em>, <em>ovr_val</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em>, <em>fbeta_weight=1.0</em>, <em>fit_params=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test_ovr" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">OrderedOVRClassifier.</code><code class="descname">fit_test_ovr</code><span class="sig-paren">(</span><em>self</em>, <em>model</em>, <em>ovr_val</em>, <em>X</em>, <em>y=None</em>, <em>eval_set=None</em>, <em>drop_cols=None</em>, <em>fbeta_weight=1.0</em>, <em>fit_params=None</em>, <em>set_threshold=None</em><span class="sig-paren">)</span><a class="headerlink" href="#OrderedOVRClassifier.fit_test_ovr" title="Permalink to this definition">¶</a></dt>
 <dd><p><strong>Description</strong></p>
 <blockquote>
 <div><p>Function for training an OVR model against a (possibly) classification-masked X dataset. Does not attach trained model to the pipeline for OrderedOVRClassifier. Also evaluates binary classification with the imported plot_thresholds function, which plots precision, recall, and fscores for all thresholds with 0.01 interval spacing.</p>
@@ -514,6 +516,8 @@
 <dd>The strength of recall versus precision in the F-score.</dd>
 <dt>fit_params: dict, optional</dt>
 <dd>Key-value pairs of optional arguments to pass into model fit function.</dd>
+<dt>set_threshold: dict of float (between 0 and 1), optional</dt>
+<dd>(OVR key: threshold value) pairs of user selected thresholds for OVR modeling. If None (default), threshold is selected based on best weighted fscore.</dd>
 </dl>
 </div></blockquote>
 <p><strong>Returns</strong></p>
@@ -555,8 +559,8 @@
 <p><strong>Returns</strong></p>
 <blockquote>
 <div><dl class="docutils">
-<dt>model: OOVR_Model</dt>
-<dd>OVR fitted model trained against classification-masked X dataset.</dd>
+<dt>grid_model: GridSearchCV or RandomizedSearchCV model</dt>
+<dd>Hyper-parameter optimizer model with recorded optimization results. Note that by design, retrain is set to False, and the user will need to train a new model with the best parameters found if they choose to attach the model to the OrderedOVRClassifier pipeline.</dd>
 </dl>
 </div></blockquote>
 </dd></dl>
@@ -726,7 +730,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'1.1.0',
+            VERSION:'1.1.2',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
